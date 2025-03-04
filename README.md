@@ -6,6 +6,8 @@ A minimalist workspace for crafting consistent daily progress.
 
 Daily Forge is designed for personal project tracking with a focus on data ownership and portability. While optimized for Vercel deployment, it can be self-hosted or run on any service of your choice.
 
+🔗 **Try it out**: [https://daily-forge.vercel.app](https://daily-forge.vercel.app)
+
 ### Key Highlights
 
 - 🔒 **Your Data, Your Control**: All data stays in your browser's local storage by default

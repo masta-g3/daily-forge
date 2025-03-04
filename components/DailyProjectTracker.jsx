@@ -23,13 +23,15 @@ const LLMpediaTracker = () => {
   const [exportDataString, setExportDataString] = useState("");
   const [generatedUrl, setGeneratedUrl] = useState("");
   const [darkMode, setDarkMode] = useState(false);
+  const [title, setTitle] = useState("Project");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
 
   // Data persistence functions
   const saveToLocalStorage = () => {
     try {
       // Explicitly stringify with null replacer and no whitespace
       const tasksJson = JSON.stringify(tasks, null, 0);
-      const settingsJson = JSON.stringify({ timerDuration, darkMode }, null, 0);
+      const settingsJson = JSON.stringify({ timerDuration, darkMode, title }, null, 0);
       
       localStorage.setItem('llmpedia-tasks', tasksJson);
       localStorage.setItem('llmpedia-settings', settingsJson);
@@ -60,6 +62,9 @@ const LLMpediaTracker = () => {
         }
         if (settings.darkMode !== undefined) {
           setDarkMode(settings.darkMode);
+        }
+        if (settings.title) {
+          setTitle(settings.title);
         }
       }
       
@@ -408,7 +413,38 @@ const LLMpediaTracker = () => {
       {/* Minimal header */}
       <header className="p-4 border-b border-gray-200 dark:border-gray-700">
         <div className="container mx-auto flex justify-between items-center">
-          <h1 className="text-xl font-normal tracking-tight">LLMpedia</h1>
+          <div>
+            {isEditingTitle ? (
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={() => {
+                  setIsEditingTitle(false);
+                  saveToLocalStorage();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setIsEditingTitle(false);
+                    saveToLocalStorage();
+                  }
+                  if (e.key === 'Escape') {
+                    setIsEditingTitle(false);
+                  }
+                }}
+                className="text-xl font-normal tracking-tight bg-transparent border-b-2 border-gray-200 dark:border-gray-700 focus:outline-none focus:border-black dark:focus:border-white"
+                autoFocus
+              />
+            ) : (
+              <h1 
+                className="text-xl font-normal tracking-tight cursor-pointer hover:opacity-80"
+                onClick={() => setIsEditingTitle(true)}
+                title="Click to edit project name"
+              >
+                {title}
+              </h1>
+            )}
+          </div>
           <div className="flex gap-6 items-center">
             <button 
               onClick={() => setView("dashboard")} 
@@ -460,7 +496,7 @@ const LLMpediaTracker = () => {
                   ) ? (
                     <span className="bg-black text-white text-xs px-2 py-1">Today's commit complete</span>
                   ) : (
-                    <span className="bg-gray-100 text-gray-700 text-xs px-2 py-1">Waiting for today's commit</span>
+                    <span className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs px-2 py-1">Waiting for today's commit</span>
                   )}
                 </div>
               </div>
@@ -487,7 +523,7 @@ const LLMpediaTracker = () => {
                 />
                 <button
                   onClick={addTask}
-                  className="bg-black text-white p-3 ml-2"
+                  className="bg-black dark:bg-gray-700 text-white p-3 ml-2"
                 >
                   <Plus size={20} />
                 </button>
@@ -508,9 +544,9 @@ const LLMpediaTracker = () => {
               )}
             </div>
             
-            {/* Pending tasks */}
-            <div className="space-y-1">
-              <div className="text-xs uppercase tracking-wider text-gray-500 mb-3">Pending features</div>
+            {/* Active tasks list */}
+            <div className="space-y-3 mt-8">
+              <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Pending features</div>
               {tasks.filter(task => !task.completed).length === 0 ? (
                 <div className="py-6 text-center text-gray-400 border border-gray-100">
                   <p>All tasks completed. Add more to keep building.</p>
@@ -552,19 +588,19 @@ const LLMpediaTracker = () => {
             {/* Completed tasks */}
             {tasks.filter(task => task.completed).length > 0 && (
               <div className="space-y-1">
-                <div className="text-xs uppercase tracking-wider text-gray-500 mb-3">Completed features</div>
+                <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Completed features</div>
                 <div className="space-y-2">
                   {tasks.filter(task => task.completed)
                     .sort((a, b) => new Date(b.date) - new Date(a.date)) // Sort by date, newest first
                     .slice(0, completedTasksToShow)
                     .map(task => (
-                      <div key={task.id} className="p-4 flex items-center justify-between bg-gray-50 border border-gray-100 group">
+                      <div key={task.id} className="p-4 flex items-center justify-between bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 group">
                         <div className="flex-grow mr-4">
-                          <p className="text-gray-500">{task.text}</p>
+                          <p className="text-gray-500 dark:text-gray-300">{task.text}</p>
                           {task.description && (
-                            <p className="text-xs text-gray-400 mt-1">{task.description}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-400 mt-1">{task.description}</p>
                           )}
-                          <p className="text-xs text-gray-400 mt-1">
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                             {new Date(task.date).toLocaleDateString('en-US', { 
                               month: 'short', 
                               day: 'numeric' 
@@ -572,12 +608,12 @@ const LLMpediaTracker = () => {
                           </p>
                         </div>
                         <div className="flex items-center">
-                          <div className="text-gray-400 mr-2">
+                          <div className="text-gray-400 dark:text-gray-300 mr-2">
                             <Check size={18} />
                           </div>
                           <button 
                             onClick={() => deleteTask(task.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-300 hover:text-gray-500"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-300 hover:text-gray-500 dark:hover:text-gray-300"
                             title="Delete task"
                           >
                             <Trash2 size={16} />
@@ -589,7 +625,7 @@ const LLMpediaTracker = () => {
                   {tasks.filter(task => task.completed).length > completedTasksToShow && (
                     <button 
                       onClick={() => setCompletedTasksToShow(prev => prev + 5)}
-                      className="w-full py-2 text-center text-sm text-gray-500 border border-gray-200 hover:bg-gray-50"
+                      className="w-full py-2 text-center text-sm text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
                     >
                       Show {Math.min(5, tasks.filter(task => task.completed).length - completedTasksToShow)} more completed
                     </button>
@@ -598,7 +634,7 @@ const LLMpediaTracker = () => {
                   {completedTasksToShow > 3 && completedTasksToShow >= tasks.filter(task => task.completed).length && (
                     <button 
                       onClick={() => setCompletedTasksToShow(3)}
-                      className="w-full py-2 text-center text-sm text-gray-500 hover:bg-gray-50"
+                      className="w-full py-2 text-center text-sm text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
                     >
                       Show less
                     </button>
@@ -704,8 +740,8 @@ const LLMpediaTracker = () => {
                 return (
                   <div 
                     key={day} 
-                    className={`h-20 p-2 relative flex flex-col border-r border-b border-gray-100 ${
-                      isToday ? 'bg-gray-50' : ''
+                    className={`h-20 p-2 relative flex flex-col border-r border-b border-gray-100 dark:border-gray-700 ${
+                      isToday ? 'bg-gray-50 dark:bg-gray-700' : ''
                     }`}
                   >
                     <span className={`text-sm ${isToday ? 'font-bold' : ''}`}>{day}</span>
@@ -718,7 +754,7 @@ const LLMpediaTracker = () => {
                     
                     {hasCommit && (
                       <div className="mt-auto mb-2 self-center">
-                        <Circle className="fill-black text-black" size={8} />
+                        <Circle className="fill-black dark:fill-gray-300 text-black dark:text-gray-300" size={8} />
                       </div>
                     )}
                   </div>
@@ -726,13 +762,13 @@ const LLMpediaTracker = () => {
               })}
             </div>
             
-            <div className="flex items-center gap-6 justify-center text-xs text-gray-500">
+            <div className="flex items-center gap-6 justify-center text-xs text-gray-500 dark:text-gray-400">
               <div className="flex items-center gap-2">
-                <Circle className="fill-black text-black" size={8} />
+                <Circle className="fill-black dark:fill-gray-300 text-black dark:text-gray-300" size={8} />
                 <span>Feature committed</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-gray-50 border border-gray-200"></div>
+                <div className="w-3 h-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600"></div>
                 <span>Today</span>
               </div>
             </div>
@@ -941,7 +977,7 @@ const LLMpediaTracker = () => {
                           
                           const dataToEncode = {
                             tasks: compactTasks,
-                            settings: { timerDuration, darkMode }
+                            settings: { timerDuration, darkMode, title }
                           };
                           
                           const jsonString = JSON.stringify(dataToEncode);
