@@ -163,7 +163,7 @@ const LLMpediaTracker = () => {
     }
   };
 
-  // Save data when tasks or timer duration changes
+  // Save data when tasks or settings change
   useEffect(() => {
     // Use a timeout to avoid saving during render cycles
     const saveTimeout = setTimeout(() => {
@@ -172,7 +172,7 @@ const LLMpediaTracker = () => {
     }, 500);
     
     return () => clearTimeout(saveTimeout);
-  }, [tasks, timerDuration]);
+  }, [tasks, timerDuration, darkMode, title]);
 
   // Load data from URL hash if present
   useEffect(() => {
