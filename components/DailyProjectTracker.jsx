@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Check, X, Play, Pause, Trash2, Circle, Download, Upload, Settings, Save } from 'lucide-react';
+import { Plus, Check, X, Play, Pause, Trash2, Circle, Download, Upload, Settings, Save, Moon, Sun } from 'lucide-react';
 
 const LLMpediaTracker = () => {
   // State management
@@ -22,13 +22,14 @@ const LLMpediaTracker = () => {
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [exportDataString, setExportDataString] = useState("");
   const [generatedUrl, setGeneratedUrl] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
 
   // Data persistence functions
   const saveToLocalStorage = () => {
     try {
       // Explicitly stringify with null replacer and no whitespace
       const tasksJson = JSON.stringify(tasks, null, 0);
-      const settingsJson = JSON.stringify({ timerDuration }, null, 0);
+      const settingsJson = JSON.stringify({ timerDuration, darkMode }, null, 0);
       
       localStorage.setItem('llmpedia-tasks', tasksJson);
       localStorage.setItem('llmpedia-settings', settingsJson);
@@ -48,33 +49,23 @@ const LLMpediaTracker = () => {
       const savedTasks = localStorage.getItem('llmpedia-tasks');
       const savedSettings = localStorage.getItem('llmpedia-settings');
       
-      let foundData = false;
-      
       if (savedTasks) {
-        console.log("Found saved tasks:", savedTasks.substring(0, 50) + "...");
-        const parsedTasks = JSON.parse(savedTasks);
-        if (Array.isArray(parsedTasks)) {
-          setTasks(parsedTasks);
-          foundData = true;
-        }
+        setTasks(JSON.parse(savedTasks));
       }
       
       if (savedSettings) {
-        try {
-          const settings = JSON.parse(savedSettings);
-          if (settings && typeof settings === 'object' && settings.timerDuration) {
-            setTimerDuration(settings.timerDuration);
-          }
-        } catch (settingsError) {
-          console.error("Error parsing settings:", settingsError);
+        const settings = JSON.parse(savedSettings);
+        if (settings.timerDuration) {
+          setTimerDuration(settings.timerDuration);
+        }
+        if (settings.darkMode !== undefined) {
+          setDarkMode(settings.darkMode);
         }
       }
       
-      return foundData;
+      return true;
     } catch (error) {
       console.error('Failed to load from localStorage:', error);
-      setStatusMessage("Error loading data");
-      setTimeout(() => setStatusMessage(""), 3000);
       return false;
     }
   };
@@ -395,30 +386,54 @@ const LLMpediaTracker = () => {
     return streak;
   };
   
+  // Toggle dark mode
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
+  
+  // Apply dark mode class to html element
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    
+    // Save preference to localStorage
+    saveToLocalStorage();
+  }, [darkMode]);
+  
   return (
-    <div className="flex flex-col min-h-screen bg-white text-gray-900 font-mono">
+    <div className="flex flex-col min-h-screen dark:bg-gray-900 dark:text-gray-100">
       {/* Minimal header */}
-      <header className="p-4 border-b border-gray-200">
+      <header className="p-4 border-b border-gray-200 dark:border-gray-700">
         <div className="container mx-auto flex justify-between items-center">
           <h1 className="text-xl font-normal tracking-tight">LLMpedia</h1>
-          <div className="flex gap-6">
+          <div className="flex gap-6 items-center">
             <button 
               onClick={() => setView("dashboard")} 
-              className={`text-sm ${view === "dashboard" ? "text-black font-bold" : "text-gray-500"}`}
+              className={`text-sm ${view === "dashboard" ? "text-black dark:text-white font-bold" : "text-gray-500 dark:text-gray-400"}`}
             >
               Dashboard
             </button>
             <button 
               onClick={() => setView("calendar")} 
-              className={`text-sm ${view === "calendar" ? "text-black font-bold" : "text-gray-500"}`}
+              className={`text-sm ${view === "calendar" ? "text-black dark:text-white font-bold" : "text-gray-500 dark:text-gray-400"}`}
             >
               Calendar
             </button>
             <button 
               onClick={() => setView("settings")} 
-              className={`text-sm ${view === "settings" ? "text-black font-bold" : "text-gray-500"}`}
+              className={`text-sm ${view === "settings" ? "text-black dark:text-white font-bold" : "text-gray-500 dark:text-gray-400"}`}
             >
               Settings
+            </button>
+            <button
+              onClick={toggleDarkMode}
+              className="ml-4 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+              aria-label="Toggle dark mode"
+            >
+              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
           </div>
         </div>
@@ -808,18 +823,41 @@ const LLMpediaTracker = () => {
         {view === "settings" && (
           <div className="space-y-8 py-4">
             <div>
+              <h2 className="text-xl mb-6">Appearance</h2>
+              <div className="p-6 border border-gray-200 dark:border-gray-700 mb-8">
+                <h3 className="text-lg mb-4">Dark Mode</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Toggle between light and dark mode for your preferred viewing experience.
+                </p>
+                <div className="flex items-center">
+                  <span className="mr-2">{darkMode ? <Moon size={18} /> : <Sun size={18} />}</span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={darkMode}
+                      onChange={toggleDarkMode}
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-black"></div>
+                    <span className="ml-3 text-sm font-medium">
+                      {darkMode ? 'Dark Mode' : 'Light Mode'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+              
               <h2 className="text-xl mb-6">Data Management</h2>
               
               {statusMessage && (
-                <div className="mb-4 p-2 bg-gray-100 text-center">
+                <div className="mb-4 p-2 bg-gray-100 dark:bg-gray-800 text-center">
                   {statusMessage}
                 </div>
               )}
               
               <div className="space-y-6">
-                <div className="p-6 border border-gray-200">
+                <div className="p-6 border border-gray-200 dark:border-gray-700">
                   <h3 className="text-lg mb-4">Local Storage</h3>
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     Your data is automatically saved in your browser's local storage. This means it will persist when you close the browser, but only on this device.
                   </p>
                   <div className="flex gap-4">
@@ -832,7 +870,7 @@ const LLMpediaTracker = () => {
                           setTimeout(() => setStatusMessage(""), 3000);
                         }
                       }}
-                      className="flex items-center gap-2 p-2 bg-black text-white text-sm"
+                      className="flex items-center gap-2 p-2 bg-black dark:bg-gray-800 text-white text-sm"
                     >
                       <Save size={16} /> Save manually
                     </button>
@@ -849,28 +887,28 @@ const LLMpediaTracker = () => {
                         }
                         setTimeout(() => setStatusMessage(""), 3000);
                       }}
-                      className="flex items-center gap-2 p-2 border border-gray-200 text-sm"
+                      className="flex items-center gap-2 p-2 border border-gray-200 dark:border-gray-700 text-sm"
                     >
                       <Upload size={16} /> Load from storage
                     </button>
                   </div>
                 </div>
                 
-                <div className="p-6 border border-gray-200">
+                <div className="p-6 border border-gray-200 dark:border-gray-700">
                   <h3 className="text-lg mb-4">Portable Backup</h3>
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     Export your data as a JSON file that can be backed up or transferred to another device.
                   </p>
                   <div className="flex flex-wrap gap-4">
                     <button 
                       onClick={prepareDataExport}
-                      className="flex items-center gap-2 p-2 bg-black text-white text-sm"
+                      className="flex items-center gap-2 p-2 bg-black dark:bg-gray-800 text-white text-sm"
                     >
                       <Download size={16} /> Export data
                     </button>
                     
                     <div className="flex items-center">
-                      <label className="flex items-center gap-2 p-2 border border-gray-200 text-sm cursor-pointer">
+                      <label className="flex items-center gap-2 p-2 border border-gray-200 dark:border-gray-700 text-sm cursor-pointer">
                         <Upload size={16} /> Import data
                         <input
                           type="file"
@@ -883,9 +921,9 @@ const LLMpediaTracker = () => {
                   </div>
                 </div>
                 
-                <div className="p-6 border border-gray-200">
+                <div className="p-6 border border-gray-200 dark:border-gray-700">
                   <h3 className="text-lg mb-4">Data Sharing via URL</h3>
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     Generate a URL containing your data that can be bookmarked or shared.
                   </p>
                   <div className="flex flex-col gap-4">
@@ -901,60 +939,44 @@ const LLMpediaTracker = () => {
                             date: task.date
                           }));
                           
-                          const data = {
+                          const dataToEncode = {
                             tasks: compactTasks,
-                            settings: { timerDuration }
+                            settings: { timerDuration, darkMode }
                           };
                           
-                          // Compress by using minimal JSON
-                          const jsonStr = JSON.stringify(data, null, 0);
+                          const jsonString = JSON.stringify(dataToEncode);
+                          const base64Data = btoa(jsonString);
+                          const url = `${window.location.origin}${window.location.pathname}?data=${encodeURIComponent(base64Data)}`;
                           
-                          try {
-                            // Convert to base64 to make it URL-safe
-                            const base64 = btoa(jsonStr);
-                            
-                            // Create URL with hash
-                            const url = `${window.location.origin}${window.location.pathname}#data=${base64}`;
-                            
-                            // Store the URL for display
-                            setGeneratedUrl(url);
-                            
-                            try {
-                              // Try clipboard API first
-                              navigator.clipboard.writeText(url).then(() => {
-                                setStatusMessage("URL copied to clipboard");
-                                setTimeout(() => setStatusMessage(""), 3000);
-                              }).catch(clipError => {
-                                console.log("Clipboard API failed, URL is shown for manual copy");
-                                setStatusMessage("URL generated - copy from below");
-                                setTimeout(() => setStatusMessage(""), 3000);
-                              });
-                            } catch (clipboardError) {
-                              console.error("Clipboard API not available:", clipboardError);
-                              setStatusMessage("URL generated - copy from below");
+                          setGeneratedUrl(url);
+                          
+                          // Copy to clipboard
+                          navigator.clipboard.writeText(url)
+                            .then(() => {
+                              setStatusMessage("URL copied to clipboard");
                               setTimeout(() => setStatusMessage(""), 3000);
-                            }
-                          } catch (encodingError) {
-                            console.error("Base64 encoding failed:", encodingError);
-                            setStatusMessage("Data too large for URL. Try export instead.");
-                            setTimeout(() => setStatusMessage(""), 3000);
-                          }
+                            })
+                            .catch(err => {
+                              console.error("Failed to copy URL: ", err);
+                              setStatusMessage("URL generated but couldn't copy to clipboard");
+                              setTimeout(() => setStatusMessage(""), 3000);
+                            });
                         } catch (error) {
-                          console.error('Failed to create sharing URL:', error);
-                          setStatusMessage("Failed to create sharing URL");
+                          console.error("Error generating URL: ", error);
+                          setStatusMessage("Error generating URL");
                           setTimeout(() => setStatusMessage(""), 3000);
                         }
                       }}
-                      className="flex items-center justify-center gap-2 p-2 bg-black text-white text-sm"
+                      className="flex items-center gap-2 p-2 bg-black dark:bg-gray-800 text-white text-sm"
                     >
                       Generate & copy URL
                     </button>
                     
                     {generatedUrl && (
                       <div className="mt-4 w-full overflow-hidden">
-                        <p className="text-xs text-gray-600 mb-1">Generated URL (click to select all):</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Generated URL (click to select all):</p>
                         <div 
-                          className="p-2 bg-gray-50 border border-gray-200 text-xs text-gray-600 overflow-x-auto whitespace-nowrap cursor-pointer"
+                          className="p-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 overflow-x-auto whitespace-nowrap cursor-pointer"
                           onClick={(e) => {
                             if (e.target.tagName === 'DIV') {
                               // Select all text in the div for easy copying
@@ -981,16 +1003,16 @@ const LLMpediaTracker = () => {
       {/* Export data modal */}
       {exportModalVisible && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 max-w-2xl w-full max-h-[90vh] overflow-auto shadow-lg">
+          <div className="bg-white dark:bg-gray-800 p-6 max-w-2xl w-full max-h-[90vh] overflow-auto shadow-lg">
             <h3 className="text-lg font-medium mb-4">Export Data</h3>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               Copy the JSON data below or try downloading directly:
             </p>
             
             <div className="flex space-x-4 mb-4">
               <button 
                 onClick={downloadViaBlob} 
-                className="bg-black text-white px-4 py-2 text-sm"
+                className="bg-black dark:bg-gray-700 text-white px-4 py-2 text-sm"
               >
                 Download as file
               </button>
@@ -998,44 +1020,32 @@ const LLMpediaTracker = () => {
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(exportDataString)
-                    .then(() => setStatusMessage("Data copied to clipboard"))
-                    .catch(() => setStatusMessage("Failed to copy - select and copy manually"));
-                  setTimeout(() => setStatusMessage(""), 3000);
+                    .then(() => {
+                      setStatusMessage("Data copied to clipboard");
+                      setTimeout(() => setStatusMessage(""), 3000);
+                    })
+                    .catch(err => {
+                      console.error("Failed to copy: ", err);
+                      setStatusMessage("Failed to copy to clipboard");
+                      setTimeout(() => setStatusMessage(""), 3000);
+                    });
                 }}
-                className="border border-gray-300 px-4 py-2 text-sm"
+                className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm"
               >
                 Copy to clipboard
               </button>
               
               <button 
                 onClick={() => setExportModalVisible(false)}
-                className="ml-auto text-gray-500 px-4 py-2 text-sm"
+                className="ml-auto border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm"
               >
                 Close
               </button>
             </div>
             
-            {statusMessage && (
-              <div className="mb-4 p-2 bg-gray-100 text-center text-sm">
-                {statusMessage}
-              </div>
-            )}
-            
-            <div className="relative">
-              <textarea
-                readOnly
-                value={exportDataString}
-                className="w-full h-64 p-3 border border-gray-300 font-mono text-xs"
-                onClick={(e) => e.target.select()}
-              />
-              <div className="absolute right-2 top-2 text-xs text-gray-400">
-                Click to select all
-              </div>
+            <div className="border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900 rounded overflow-auto max-h-[50vh]">
+              <pre className="text-xs text-gray-800 dark:text-gray-300 whitespace-pre-wrap">{exportDataString}</pre>
             </div>
-            
-            <p className="text-xs text-gray-500 mt-4">
-              Save this JSON data in a secure location. You can import it later to restore your tasks.
-            </p>
           </div>
         </div>
       )}
