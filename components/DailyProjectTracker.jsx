@@ -24,6 +24,7 @@ const LLMpediaTracker = () => {
   const [backfillDialogVisible, setBackfillDialogVisible] = useState(false);
   const [backfillText, setBackfillText] = useState("");
   const [backfillDescription, setBackfillDescription] = useState("");
+  const [editingTaskId, setEditingTaskId] = useState(null);
 
   // Data persistence functions
   const saveToLocalStorage = () => {
@@ -410,7 +411,21 @@ const LLMpediaTracker = () => {
     setTasks(tasks.filter(task => task.id !== id));
   };
   
+  // Check if we already completed a task today
+  const hasCompletedTaskToday = () => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return tasks.some(task => task.completed && task.date === todayStr);
+  };
+
   const startTask = (task) => {
+    // Don't allow starting new tasks if we already completed one today
+    if (hasCompletedTaskToday()) {
+      setStatusMessage("You've already completed a task today. Take a break!");
+      setTimeout(() => setStatusMessage(""), 3000);
+      return;
+    }
+    
     setActiveTask(task);
     setTimeRemaining(timerDuration * 60);
     setTimerRunning(true);
@@ -419,9 +434,13 @@ const LLMpediaTracker = () => {
   
   const completeTask = () => {
     if (activeTask) {
+      // Get today's date in YYYY-MM-DD format in local timezone
+      const today = new Date();
+      const localDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      
       setTasks(tasks.map(task => 
         task.id === activeTask.id 
-          ? { ...task, completed: true, date: new Date().toISOString().split('T')[0] } 
+          ? { ...task, completed: true, date: localDateStr } 
           : task
       ));
       setActiveTask(null);
@@ -438,8 +457,15 @@ const LLMpediaTracker = () => {
   
   // Check if a day has a completed task
   const hasCompletedTask = (day) => {
+    // Format date string in YYYY-MM-DD format
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return tasks.some(task => task.date === dateStr);
+    
+    // Check if any task has this exact date string
+    return tasks.some(task => {
+      // Ensure we're comparing the date part only (YYYY-MM-DD)
+      const taskDate = task.date ? task.date.split('T')[0] : null;
+      return taskDate === dateStr && task.completed;
+    });
   };
   
   // Calculate streak
@@ -487,28 +513,47 @@ const LLMpediaTracker = () => {
     saveToLocalStorage();
   }, [darkMode]);
   
-  // Add a completed task for a past date
+  // Add or update a task for a specific date
   const addBackfilledTask = () => {
     if (backfillText.trim() !== "") {
-      const newTask = {
-        id: Date.now(),
-        text: backfillText,
-        description: backfillDescription.trim(),
-        completed: true,
-        date: selectedDate
-      };
+      if (editingTaskId) {
+        // Update existing task
+        setTasks(tasks.map(task => 
+          task.id === editingTaskId 
+            ? { 
+                ...task, 
+                text: backfillText,
+                description: backfillDescription.trim(),
+                date: selectedDate,
+                completed: true
+              } 
+            : task
+        ));
+      } else {
+        // Add new task
+        const newTask = {
+          id: Date.now(),
+          text: backfillText,
+          description: backfillDescription.trim(),
+          completed: true,
+          date: selectedDate
+        };
+        
+        setTasks([...tasks, newTask]);
+      }
       
-      setTasks([...tasks, newTask]);
+      // Reset form
       setBackfillText("");
       setBackfillDescription("");
+      setEditingTaskId(null);
       setBackfillDialogVisible(false);
     }
   };
 
   return (
     <div className="flex flex-col min-h-screen dark:bg-gray-900 dark:text-gray-100">
-      {/* Minimal header */}
-      <header className="p-4 border-b border-gray-200 dark:border-gray-700">
+      {/* Sticky header */}
+      <header className="sticky top-0 z-10 p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
         <div className="container mx-auto flex justify-between items-center">
           <div>
             {isEditingTitle ? (
@@ -644,6 +689,11 @@ const LLMpediaTracker = () => {
             {/* Active tasks list */}
             <div className="space-y-3 mt-8">
               <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Pending features</div>
+              {statusMessage && (
+                <div className="mb-4 p-2 bg-gray-100 dark:bg-gray-800 text-center text-sm">
+                  {statusMessage}
+                </div>
+              )}
               {tasks.filter(task => !task.completed).length === 0 ? (
                 <div className="py-6 text-center text-gray-400 border border-gray-100">
                   <p>All tasks completed. Add more to keep building.</p>
@@ -698,10 +748,14 @@ const LLMpediaTracker = () => {
                             <p className="text-xs text-gray-400 dark:text-gray-400 mt-1">{task.description}</p>
                           )}
                           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                            {new Date(task.date).toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric' 
-                            })}
+                            {(() => {
+                              // Parse the date parts directly from YYYY-MM-DD format
+                              const [year, month, day] = task.date.split('-').map(Number);
+                              return new Date(year, month - 1, day).toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric' 
+                              });
+                            })()}
                           </p>
                         </div>
                         <div className="flex items-center">
@@ -832,7 +886,11 @@ const LLMpediaTracker = () => {
                 
                 // Find task that was completed on this day (if any)
                 const dayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const dayTask = tasks.find(t => t.date === dayStr);
+                const dayTask = tasks.find(t => {
+                  // Ensure we're comparing the date part only (YYYY-MM-DD)
+                  const taskDate = t.date ? t.date.split('T')[0] : null;
+                  return taskDate === dayStr && t.completed;
+                });
                 
                 // Past date check (today or earlier)
                 const isPastDate = new Date(currentYear, currentMonth, day) <= new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -845,8 +903,22 @@ const LLMpediaTracker = () => {
                     } ${isPastDate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : ''}`}
                     onClick={() => {
                       if (isPastDate) {
-                        // Show a minimal dialog to add a completed task for this date
+                        // Check if there's already a task for this date
+                        const existingTask = tasks.find(t => t.date === dayStr);
                         setSelectedDate(dayStr);
+                        
+                        if (existingTask) {
+                          // Pre-fill the form with existing task data for editing
+                          setBackfillText(existingTask.text);
+                          setBackfillDescription(existingTask.description || "");
+                          setEditingTaskId(existingTask.id);
+                        } else {
+                          // Clear the form for a new task
+                          setBackfillText("");
+                          setBackfillDescription("");
+                          setEditingTaskId(null);
+                        }
+                        
                         setBackfillDialogVisible(true);
                       }
                     }}
@@ -1195,9 +1267,22 @@ const LLMpediaTracker = () => {
 
       {/* Backfill Dialog */}
       {backfillDialogVisible && (
-        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center p-4 z-50">
+        <div 
+          className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center p-4 z-50"
+          onClick={(e) => {
+            // Close dialog when clicking the backdrop (outside the dialog)
+            if (e.target === e.currentTarget) {
+              setBackfillDialogVisible(false);
+              setBackfillText("");
+              setBackfillDescription("");
+              setEditingTaskId(null);
+            }
+          }}
+        >
           <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-xl">
-            <h3 className="text-lg font-medium mb-4">Add completed task for {selectedDate}</h3>
+            <h3 className="text-lg font-medium mb-4">
+              {editingTaskId ? `Edit task for ${selectedDate}` : `Add task for ${selectedDate}`}
+            </h3>
             
             <input
               type="text"
@@ -1215,29 +1300,49 @@ const LLMpediaTracker = () => {
               className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded mb-4 h-24"
             />
             
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setBackfillDialogVisible(false);
-                  setBackfillText("");
-                  setBackfillDescription("");
-                }}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                Cancel
-              </button>
+            <div className="flex justify-between items-center">
+              {/* Delete button - only show for existing tasks */}
+              {editingTaskId && (
+                <button
+                  onClick={() => {
+                    // Delete the task
+                    setTasks(tasks.filter(task => task.id !== editingTaskId));
+                    setBackfillDialogVisible(false);
+                    setBackfillText("");
+                    setBackfillDescription("");
+                    setEditingTaskId(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Delete
+                </button>
+              )}
               
-              <button
-                onClick={addBackfilledTask}
-                disabled={backfillText.trim() === ""}
-                className={`px-4 py-2 rounded text-white ${
-                  backfillText.trim() === "" 
-                    ? "bg-blue-300 dark:bg-blue-700 cursor-not-allowed" 
-                    : "bg-blue-500 dark:bg-blue-600 hover:bg-blue-600 dark:hover:bg-blue-700"
-                }`}
-              >
-                Add Completed Task
-              </button>
+              <div className={`flex gap-2 ${editingTaskId ? '' : 'ml-auto'}`}>
+                <button
+                  onClick={() => {
+                    setBackfillDialogVisible(false);
+                    setBackfillText("");
+                    setBackfillDescription("");
+                    setEditingTaskId(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                
+                <button
+                  onClick={addBackfilledTask}
+                  disabled={backfillText.trim() === ""}
+                  className={`px-4 py-2 rounded ${
+                    backfillText.trim() === "" 
+                      ? "bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed" 
+                      : "bg-black dark:bg-gray-700 text-white hover:bg-gray-800 dark:hover:bg-gray-600"
+                  }`}
+                >
+                  {editingTaskId ? 'Update Task' : 'Add Task'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
