@@ -20,6 +20,10 @@ const LLMpediaTracker = () => {
   const [title, setTitle] = useState("Project");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);  // Add initialization flag
+  const [selectedDate, setSelectedDate] = useState("");
+  const [backfillDialogVisible, setBackfillDialogVisible] = useState(false);
+  const [backfillText, setBackfillText] = useState("");
+  const [backfillDescription, setBackfillDescription] = useState("");
 
   // Data persistence functions
   const saveToLocalStorage = () => {
@@ -483,6 +487,24 @@ const LLMpediaTracker = () => {
     saveToLocalStorage();
   }, [darkMode]);
   
+  // Add a completed task for a past date
+  const addBackfilledTask = () => {
+    if (backfillText.trim() !== "") {
+      const newTask = {
+        id: Date.now(),
+        text: backfillText,
+        description: backfillDescription.trim(),
+        completed: true,
+        date: selectedDate
+      };
+      
+      setTasks([...tasks, newTask]);
+      setBackfillText("");
+      setBackfillDescription("");
+      setBackfillDialogVisible(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen dark:bg-gray-900 dark:text-gray-100">
       {/* Minimal header */}
@@ -812,12 +834,22 @@ const LLMpediaTracker = () => {
                 const dayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const dayTask = tasks.find(t => t.date === dayStr);
                 
+                // Past date check (today or earlier)
+                const isPastDate = new Date(currentYear, currentMonth, day) <= new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                
                 return (
                   <div 
                     key={day} 
                     className={`h-20 p-2 relative flex flex-col border-r border-b border-gray-100 dark:border-gray-700 ${
                       isToday ? 'bg-gray-50 dark:bg-gray-700' : ''
-                    }`}
+                    } ${isPastDate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : ''}`}
+                    onClick={() => {
+                      if (isPastDate) {
+                        // Show a minimal dialog to add a completed task for this date
+                        setSelectedDate(dayStr);
+                        setBackfillDialogVisible(true);
+                      }
+                    }}
                   >
                     <span className={`text-sm ${isToday ? 'font-bold' : ''}`}>{day}</span>
                     
@@ -1156,6 +1188,56 @@ const LLMpediaTracker = () => {
             
             <div className="border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900 rounded overflow-auto max-h-[50vh]">
               <pre className="text-xs text-gray-800 dark:text-gray-300 whitespace-pre-wrap">{exportDataString}</pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Backfill Dialog */}
+      {backfillDialogVisible && (
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-xl">
+            <h3 className="text-lg font-medium mb-4">Add completed task for {selectedDate}</h3>
+            
+            <input
+              type="text"
+              value={backfillText}
+              onChange={(e) => setBackfillText(e.target.value)}
+              placeholder="What did you accomplish?"
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded mb-2"
+              autoFocus
+            />
+            
+            <textarea
+              value={backfillDescription}
+              onChange={(e) => setBackfillDescription(e.target.value)}
+              placeholder="Add any details (optional)"
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded mb-4 h-24"
+            />
+            
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setBackfillDialogVisible(false);
+                  setBackfillText("");
+                  setBackfillDescription("");
+                }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              
+              <button
+                onClick={addBackfilledTask}
+                disabled={backfillText.trim() === ""}
+                className={`px-4 py-2 rounded text-white ${
+                  backfillText.trim() === "" 
+                    ? "bg-blue-300 dark:bg-blue-700 cursor-not-allowed" 
+                    : "bg-blue-500 dark:bg-blue-600 hover:bg-blue-600 dark:hover:bg-blue-700"
+                }`}
+              >
+                Add Completed Task
+              </button>
             </div>
           </div>
         </div>
