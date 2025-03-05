@@ -322,14 +322,14 @@ const LLMpediaTracker = () => {
     };
   }, []); // Empty dependency array since this should only run once on mount
   
-  // Set custom favicon
+  // Set custom favicon and title
   useEffect(() => {
     // Create an SVG favicon
     const svgString = `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
         <rect width="64" height="64" fill="black"/>
         <text x="50%" y="50%" font-family="monospace" font-size="20" 
-              fill="white" text-anchor="middle" dominant-baseline="middle">LLM</text>
+              fill="white" text-anchor="middle" dominant-baseline="middle">DF</text>
       </svg>
     `;
     
@@ -349,9 +349,9 @@ const LLMpediaTracker = () => {
     // Set the href of the link to our data URL
     link.href = dataUrl;
     
-    // Update the document title as well
-    document.title = "LLMpedia Tracker";
-  }, []);
+    // Update the document title to match project title
+    document.title = `${title} Tracker`;
+  }, [title]); // Add title as dependency so it updates when title changes
 
   // Reset completed tasks view when changing views
   useEffect(() => {
