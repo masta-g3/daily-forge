@@ -3,13 +3,7 @@ import { Plus, Check, X, Play, Pause, Trash2, Circle, Download, Upload, Settings
 
 const LLMpediaTracker = () => {
   // State management
-  const [tasks, setTasks] = useState([
-    { id: 1, text: "Create database schema for LLM comparison", description: "Define entities and relationships for comparing different LLM architectures", completed: true, date: "2025-03-01" },
-    { id: 2, text: "Design interactive visualization for model parameters", description: "Create a flexible chart system that shows model size, training data, and performance metrics", completed: true, date: "2025-03-02" },
-    { id: 3, text: "Implement citation system for research papers", description: "Allow users to link claims to academic papers with proper citation format", completed: false, date: null },
-    { id: 4, text: "Build user profile system for contributors", description: "Create profiles that track expertise and contribution areas", completed: false, date: null },
-    { id: 5, text: "Create taxonomy for LLM capabilities", description: "Develop a standardized way to classify and compare model capabilities", completed: false, date: null },
-  ]);
+  const [tasks, setTasks] = useState([]);  // Start with empty array instead of example data
   const [newTask, setNewTask] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [activeTask, setActiveTask] = useState(null);
@@ -25,13 +19,25 @@ const LLMpediaTracker = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [title, setTitle] = useState("Project");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);  // Add initialization flag
 
   // Data persistence functions
   const saveToLocalStorage = () => {
     try {
+      // Don't save if we haven't initialized yet
+      if (!isInitialized) {
+        console.log('Skipping save - not yet initialized');
+        return false;
+      }
+
       // Explicitly stringify with null replacer and no whitespace
       const tasksJson = JSON.stringify(tasks, null, 0);
       const settingsJson = JSON.stringify({ timerDuration, darkMode, title }, null, 0);
+      
+      console.log('Saving to localStorage:', {
+        tasks: tasks,
+        settings: { timerDuration, darkMode, title }
+      });
       
       localStorage.setItem('llmpedia-tasks', tasksJson);
       localStorage.setItem('llmpedia-settings', settingsJson);
@@ -50,6 +56,11 @@ const LLMpediaTracker = () => {
       console.log("Loading from localStorage");
       const savedTasks = localStorage.getItem('llmpedia-tasks');
       const savedSettings = localStorage.getItem('llmpedia-settings');
+      
+      console.log('Retrieved from localStorage:', {
+        tasks: savedTasks ? JSON.parse(savedTasks) : null,
+        settings: savedSettings ? JSON.parse(savedSettings) : null
+      });
       
       if (savedTasks) {
         setTasks(JSON.parse(savedTasks));
@@ -79,7 +90,7 @@ const LLMpediaTracker = () => {
     try {
       const data = {
         tasks,
-        settings: { timerDuration }
+        settings: { timerDuration, darkMode, title }
       };
       
       const jsonStr = JSON.stringify(data, null, 2);
@@ -105,16 +116,27 @@ const LLMpediaTracker = () => {
       reader.onload = (e) => {
         try {
           const data = JSON.parse(e.target.result);
+          console.log('Importing data:', data);
           
           if (data.tasks && Array.isArray(data.tasks)) {
             setTasks(data.tasks);
           }
           
           if (data.settings && typeof data.settings === 'object') {
-            if (data.settings.timerDuration) {
-              setTimerDuration(data.settings.timerDuration);
+            const { timerDuration, darkMode, title } = data.settings;
+            if (timerDuration) {
+              setTimerDuration(timerDuration);
+            }
+            if (darkMode !== undefined) {
+              setDarkMode(darkMode);
+            }
+            if (title) {
+              setTitle(title);
             }
           }
+          
+          // Save imported data to localStorage
+          setTimeout(() => saveToLocalStorage(), 0);
           
           setStatusMessage("Data imported successfully");
           setTimeout(() => setStatusMessage(""), 3000);
@@ -165,14 +187,21 @@ const LLMpediaTracker = () => {
 
   // Save data when tasks or settings change
   useEffect(() => {
+    // Only save if initialization is complete
+    if (!isInitialized) {
+      console.log("Skipping auto-save - not yet initialized");
+      return;
+    }
+
     // Use a timeout to avoid saving during render cycles
     const saveTimeout = setTimeout(() => {
+      console.log("Auto-saving changes");
       saveToLocalStorage();
       console.log("Data saved to localStorage", new Date().toISOString());
     }, 500);
     
     return () => clearTimeout(saveTimeout);
-  }, [tasks, timerDuration, darkMode, title]);
+  }, [tasks, timerDuration, darkMode, title, isInitialized]);
 
   // Load data from URL hash if present
   useEffect(() => {
@@ -193,10 +222,21 @@ const LLMpediaTracker = () => {
             }
             
             if (data.settings && typeof data.settings === 'object') {
-              if (data.settings.timerDuration) {
-                setTimerDuration(data.settings.timerDuration);
+              const { timerDuration, darkMode, title } = data.settings;
+              if (timerDuration) {
+                setTimerDuration(timerDuration);
+              }
+              if (darkMode !== undefined) {
+                setDarkMode(darkMode);
+              }
+              if (title) {
+                setTitle(title);
               }
             }
+            
+            // Mark as initialized after loading URL data
+            setIsInitialized(true);
+            console.log("Initialization complete from URL data");
             
             setStatusMessage("Data loaded from URL");
             setTimeout(() => setStatusMessage(""), 3000);
@@ -207,40 +247,75 @@ const LLMpediaTracker = () => {
             console.error('Failed to parse data from URL:', error);
             setStatusMessage("Error loading data from URL");
             setTimeout(() => setStatusMessage(""), 3000);
+            // Still mark as initialized even on error
+            setIsInitialized(true);
           }
         }
       }
     } catch (error) {
       console.error('Error processing URL hash:', error);
+      // Still mark as initialized even on error
+      setIsInitialized(true);
     }
   }, []);
 
   // Load data on initial render - with a slight delay to avoid conflicts with hash loading
   useEffect(() => {
-    // Small delay to make sure URL hash loading takes precedence
-    const initialLoadTimeout = setTimeout(() => {
+    let mounted = true;
+
+    const initializeApp = async () => {
       try {
-        console.log("Attempting to load from localStorage");
-        const dataFromStorage = loadFromLocalStorage();
+        console.log("Starting initialization");
         
-        // If nothing in local storage, load example data
-        if (!dataFromStorage && tasks.length === 0) {
-          console.log("No data in localStorage, loading example data");
-          setTasks([
-            { id: 1, text: "Create database schema for LLM comparison", description: "Define entities and relationships for comparing different LLM architectures", completed: true, date: "2025-03-01" },
-            { id: 2, text: "Design interactive visualization for model parameters", description: "Create a flexible chart system that shows model size, training data, and performance metrics", completed: true, date: "2025-03-02" },
-            { id: 3, text: "Implement citation system for research papers", description: "Allow users to link claims to academic papers with proper citation format", completed: false, date: null },
-            { id: 4, text: "Build user profile system for contributors", description: "Create profiles that track expertise and contribution areas", completed: false, date: null },
-            { id: 5, text: "Create taxonomy for LLM capabilities", description: "Develop a standardized way to classify and compare model capabilities", completed: false, date: null },
-          ]);
+        // First try to load from localStorage
+        console.log("Attempting initial load from localStorage");
+        const dataFromStorage = loadFromLocalStorage();
+        console.log("Initial load result:", dataFromStorage);
+        
+        // If component is still mounted
+        if (mounted) {
+          // If nothing in local storage, load example data
+          if (!dataFromStorage && tasks.length === 0) {
+            console.log("No data in localStorage, loading example data");
+            const exampleData = [
+              { id: 1, text: "Create database schema for LLM comparison", description: "Define entities and relationships for comparing different LLM architectures", completed: true, date: "2025-03-01" },
+              { id: 2, text: "Design interactive visualization for model parameters", description: "Create a flexible chart system that shows model size, training data, and performance metrics", completed: true, date: "2025-03-02" },
+              { id: 3, text: "Implement citation system for research papers", description: "Allow users to link claims to academic papers with proper citation format", completed: false, date: null },
+              { id: 4, text: "Build user profile system for contributors", description: "Create profiles that track expertise and contribution areas", completed: false, date: null },
+              { id: 5, text: "Create taxonomy for LLM capabilities", description: "Develop a standardized way to classify and compare model capabilities", completed: false, date: null },
+            ];
+            setTasks(exampleData);
+            
+            // Wait for state to update before saving
+            await new Promise(resolve => setTimeout(resolve, 0));
+            
+            if (mounted) {
+              console.log("Saving example data");
+              saveToLocalStorage();
+            }
+          }
+          
+          // Mark initialization as complete
+          console.log("Marking initialization as complete");
+          setIsInitialized(true);
         }
       } catch (error) {
-        console.error("Error during initial data loading:", error);
+        console.error("Error during initialization:", error);
+        if (mounted) {
+          setIsInitialized(true); // Still mark as initialized to prevent lockup
+        }
       }
-    }, 100);
+    };
+
+    // Start initialization with a small delay
+    const initTimeout = setTimeout(initializeApp, 100);
     
-    return () => clearTimeout(initialLoadTimeout);
-  }, []);
+    // Cleanup function
+    return () => {
+      mounted = false;
+      clearTimeout(initTimeout);
+    };
+  }, []); // Empty dependency array since this should only run once on mount
   
   // Set custom favicon
   useEffect(() => {
