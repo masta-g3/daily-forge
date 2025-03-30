@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Check, X, Play, Pause, Trash2, Circle, Download, Upload, Settings, Save, Moon, Sun } from 'lucide-react';
+import { Plus, Check, X, Play, Pause, Trash2, Circle, Download, Upload, Settings, Save, Moon, Sun, Coffee } from 'lucide-react';
 
 const LLMpediaTracker = () => {
   // State management
@@ -10,6 +10,7 @@ const LLMpediaTracker = () => {
   const [timerRunning, setTimerRunning] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(45 * 60); // 45 minutes in seconds
   const [timerDuration, setTimerDuration] = useState(45); // in minutes
+  const [isBreakMode, setIsBreakMode] = useState(false); // New state for break mode
   const [view, setView] = useState("dashboard"); // "dashboard", "calendar", "timer", "settings"
   const [statusMessage, setStatusMessage] = useState("");
   const [completedTasksToShow, setCompletedTasksToShow] = useState(3);
@@ -370,10 +371,14 @@ const LLMpediaTracker = () => {
       }, 1000);
     } else if (timeRemaining === 0) {
       setTimerRunning(false);
+      if (isBreakMode) {
+        setIsBreakMode(false);
+        setView("dashboard");
+      }
     }
     
     return () => clearInterval(interval);
-  }, [timerRunning, timeRemaining]);
+  }, [timerRunning, timeRemaining, isBreakMode]);
   
   // Calendar generation
   const today = new Date();
@@ -550,6 +555,14 @@ const LLMpediaTracker = () => {
     }
   };
 
+  const startBreak = () => {
+    setIsBreakMode(true);
+    setActiveTask(null);
+    setTimeRemaining(5 * 60); // 5 minutes in seconds
+    setTimerRunning(true);
+    setView("timer");
+  };
+
   return (
     <div className="flex flex-col min-h-screen dark:bg-gray-900 dark:text-gray-100">
       {/* Sticky header */}
@@ -624,9 +637,18 @@ const LLMpediaTracker = () => {
           <div className="space-y-12">
             {/* Top stats section */}
             <div className="flex justify-between items-start">
-              <div>
-                <div className="text-4xl font-light">{getStreak()}</div>
-                <div className="text-xs uppercase tracking-wider text-gray-500 mt-1">Day streak</div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <div className="text-4xl font-light">{getStreak()}</div>
+                  <div className="text-xs uppercase tracking-wider text-gray-500 mt-1">Day streak</div>
+                </div>
+                <button
+                  onClick={startBreak}
+                  className="p-2 text-gray-500 hover:text-black dark:hover:text-white transition-colors"
+                  title="Take a 5-minute break"
+                >
+                  <Coffee size={20} />
+                </button>
               </div>
               
               <div className="text-right">
@@ -955,28 +977,32 @@ const LLMpediaTracker = () => {
         )}
         
         {/* Timer view */}
-        {view === "timer" && activeTask && (
+        {view === "timer" && (isBreakMode || activeTask) && (
           <div className="flex flex-col items-center justify-center h-full py-12">
             <div className="mb-12 text-center">
               <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">
-                Current focus
+                {isBreakMode ? "Break time" : "Current focus"}
               </div>
-              <p className="text-xl">{activeTask.text}</p>
-              {activeTask.description && (
-                <p className="text-sm text-gray-600 mt-2 max-w-md">{activeTask.description}</p>
+              {!isBreakMode && (
+                <>
+                  <p className="text-xl">{activeTask.text}</p>
+                  {activeTask.description && (
+                    <p className="text-sm text-gray-600 mt-2 max-w-md">{activeTask.description}</p>
+                  )}
+                </>
               )}
             </div>
             
-            <div className="w-64 h-64 border-2 border-gray-200 rounded-full flex items-center justify-center relative mb-12">
+            <div className={`w-64 h-64 border-2 ${isBreakMode ? 'border-gray-400' : 'border-gray-200'} rounded-full flex items-center justify-center relative mb-12`}>
               <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
                 <circle 
                   cx="50" 
                   cy="50" 
                   r="48"
                   fill="transparent"
-                  stroke="black" 
+                  stroke={isBreakMode ? "#9CA3AF" : "black"}
                   strokeWidth="4"
-                  strokeDasharray={`${(1 - timeRemaining / (timerDuration * 60)) * 301} 301`}
+                  strokeDasharray={`${(1 - timeRemaining / (isBreakMode ? 300 : timerDuration * 60)) * 301} 301`}
                   transform="rotate(-90 50 50)"
                 />
               </svg>
@@ -991,17 +1017,20 @@ const LLMpediaTracker = () => {
                 {timerRunning ? 'Pause' : 'Start'}
               </button>
               
-              <button
-                onClick={completeTask}
-                className="px-6 py-3 bg-white text-black border border-gray-200"
-              >
-                Complete
-              </button>
+              {!isBreakMode && (
+                <button
+                  onClick={completeTask}
+                  className="px-6 py-3 bg-white text-black border border-gray-200"
+                >
+                  Complete
+                </button>
+              )}
               
               <button
                 onClick={() => {
                   setActiveTask(null);
                   setTimerRunning(false);
+                  setIsBreakMode(false);
                   setView("dashboard");
                 }}
                 className="px-6 py-3 text-gray-500"
@@ -1010,27 +1039,29 @@ const LLMpediaTracker = () => {
               </button>
             </div>
             
-            <div className="mt-12 w-64">
-              <div className="flex justify-between text-xs text-gray-500 mb-2">
-                <span>15m</span>
-                <span>{timerDuration}m</span>
-                <span>90m</span>
+            {!isBreakMode && (
+              <div className="mt-12 w-64">
+                <div className="flex justify-between text-xs text-gray-500 mb-2">
+                  <span>15m</span>
+                  <span>{timerDuration}m</span>
+                  <span>90m</span>
+                </div>
+                <input
+                  type="range"
+                  min="15"
+                  max="90"
+                  step="5"
+                  value={timerDuration}
+                  onChange={(e) => {
+                    const newDuration = parseInt(e.target.value);
+                    setTimerDuration(newDuration);
+                    setTimeRemaining(newDuration * 60);
+                    setTimerRunning(false);
+                  }}
+                  className="w-full appearance-none h-1 bg-gray-200 rounded outline-none"
+                />
               </div>
-              <input
-                type="range"
-                min="15"
-                max="90"
-                step="5"
-                value={timerDuration}
-                onChange={(e) => {
-                  const newDuration = parseInt(e.target.value);
-                  setTimerDuration(newDuration);
-                  setTimeRemaining(newDuration * 60);
-                  setTimerRunning(false);
-                }}
-                className="w-full appearance-none h-1 bg-gray-200 rounded outline-none"
-              />
-            </div>
+            )}
           </div>
         )}
         
