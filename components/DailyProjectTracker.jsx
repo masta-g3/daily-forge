@@ -1,6 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Check, X, Play, Pause, Trash2, Circle, Download, Upload, Settings, Save, Moon, Sun, Coffee } from 'lucide-react';
 
+// Custom grip lines icon component
+const GripLines = ({ size = 20, className = "" }) => {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      width={size} 
+      height={size} 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      className={`lucide lucide-grip-vertical ${className}`}
+    >
+      <circle cx="9" cy="6" r="1" />
+      <circle cx="9" cy="12" r="1" />
+      <circle cx="9" cy="18" r="1" />
+      <circle cx="15" cy="6" r="1" />
+      <circle cx="15" cy="12" r="1" />
+      <circle cx="15" cy="18" r="1" />
+    </svg>
+  );
+};
+
 const LLMpediaTracker = () => {
   // State management
   const [tasks, setTasks] = useState([]);  // Start with empty array instead of example data
@@ -26,6 +51,8 @@ const LLMpediaTracker = () => {
   const [backfillText, setBackfillText] = useState("");
   const [backfillDescription, setBackfillDescription] = useState("");
   const [editingTaskId, setEditingTaskId] = useState(null);
+  const [draggedTaskId, setDraggedTaskId] = useState(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState(null);
 
   // Data persistence functions
   const saveToLocalStorage = () => {
@@ -563,6 +590,76 @@ const LLMpediaTracker = () => {
     setView("timer");
   };
 
+  // Handle drag start
+  const handleDragStart = (e, taskId) => {
+    setDraggedTaskId(taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    // Add a subtle opacity change
+    e.target.style.opacity = '0.75';
+    // Set a ghost drag image (optional)
+    const dragIcon = document.createElement('div');
+    dragIcon.textContent = '↕️';
+    dragIcon.style.opacity = '0';
+    document.body.appendChild(dragIcon);
+    e.dataTransfer.setDragImage(dragIcon, 0, 0);
+    // Cleanup
+    setTimeout(() => {
+      document.body.removeChild(dragIcon);
+    }, 0);
+  };
+
+  // Handle drag end
+  const handleDragEnd = (e) => {
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    e.target.style.opacity = '1';
+  };
+
+  // Handle drag over
+  const handleDragOver = (e, taskId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedTaskId !== taskId) {
+      setDragOverTaskId(taskId);
+    }
+  };
+
+  // Handle drag leave
+  const handleDragLeave = () => {
+    setDragOverTaskId(null);
+  };
+
+  // Handle drop
+  const handleDrop = (e, targetTaskId) => {
+    e.preventDefault();
+    setDragOverTaskId(null);
+    
+    if (draggedTaskId === targetTaskId) {
+      return;
+    }
+    
+    const pendingTasks = tasks.filter(task => !task.completed);
+    const sourceTaskIndex = pendingTasks.findIndex(task => task.id === draggedTaskId);
+    const targetTaskIndex = pendingTasks.findIndex(task => task.id === targetTaskId);
+    
+    if (sourceTaskIndex === -1 || targetTaskIndex === -1) {
+      return;
+    }
+    
+    // Create a new array with the tasks in the new order
+    const newPendingTasks = [...pendingTasks];
+    const [movedTask] = newPendingTasks.splice(sourceTaskIndex, 1);
+    newPendingTasks.splice(targetTaskIndex, 0, movedTask);
+    
+    // Update the full tasks array with the new order
+    const completedTasks = tasks.filter(task => task.completed);
+    setTasks([...newPendingTasks, ...completedTasks]);
+
+    // Show a brief confirmation message
+    setStatusMessage("Task order updated");
+    setTimeout(() => setStatusMessage(""), 1500);
+  };
+
   return (
     <div className="flex flex-col min-h-screen dark:bg-gray-900 dark:text-gray-100">
       {/* Sticky header */}
@@ -723,13 +820,36 @@ const LLMpediaTracker = () => {
               ) : (
                 <div className="space-y-2">
                   {tasks.filter(task => !task.completed).map(task => (
-                    <div key={task.id} className="p-4 flex flex-col border border-gray-100 hover:border-gray-300 transition-colors">
+                    <div 
+                      key={task.id} 
+                      className={`p-4 flex flex-col border transition-all duration-200 ${
+                        draggedTaskId === task.id 
+                          ? 'opacity-60 bg-gray-50 dark:bg-gray-800 border-gray-200' 
+                          : dragOverTaskId === task.id
+                            ? 'border-black dark:border-white border-2' 
+                            : 'border-gray-100 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-500'
+                      }`}
+                      draggable="true"
+                      onDragStart={(e) => handleDragStart(e, task.id)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => handleDragOver(e, task.id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, task.id)}
+                    >
                       <div className="flex justify-between items-start">
-                        <div className="flex-grow mr-4">
-                          <p>{task.text}</p>
-                          {task.description && (
-                            <p className="text-sm text-gray-500 mt-1">{task.description}</p>
-                          )}
+                        <div className="flex items-start">
+                          <div 
+                            className="p-1 mr-2 text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 cursor-move"
+                            title="Drag to reorder"
+                          >
+                            <GripLines size={16} />
+                          </div>
+                          <div className="flex-grow">
+                            <p>{task.text}</p>
+                            {task.description && (
+                              <p className="text-sm text-gray-500 mt-1">{task.description}</p>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center space-x-3">
                           <button 
