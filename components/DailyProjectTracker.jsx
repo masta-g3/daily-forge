@@ -27,8 +27,11 @@ const LLMpediaTracker = () => {
   const [backfillText, setBackfillText] = useState("");
   const [backfillDescription, setBackfillDescription] = useState("");
   const [editingTaskId, setEditingTaskId] = useState(null);
-  const [currentViewMonth, setCurrentViewMonth] = useState(new Date().getMonth());
-  const [currentViewYear, setCurrentViewYear] = useState(new Date().getFullYear());
+  const [showCalendarOverlapDialog, setShowCalendarOverlapDialog] = useState(false);
+  const [draggedTaskDate, setDraggedTaskDate] = useState(null);
+  const [dropTargetDate, setDropTargetDate] = useState(null);
+  const [displayMonth, setDisplayMonth] = useState(new Date().getMonth());
+  const [displayYear, setDisplayYear] = useState(new Date().getFullYear());
 
   // Data persistence functions
   const saveToLocalStorage = () => {
@@ -385,40 +388,40 @@ const LLMpediaTracker = () => {
   
   // Calendar generation
   const today = new Date();
-  const currentMonth = currentViewMonth;
-  const currentYear = currentViewYear;
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
   
   const getDaysInMonth = (month, year) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (month, year) => new Date(year, month, 1).getDay();
   
-  const daysInMonth = getDaysInMonth(currentMonth, currentYear);
-  const firstDayOfMonth = getFirstDayOfMonth(currentMonth, currentYear);
+  const daysInMonth = getDaysInMonth(displayMonth, displayYear);
+  const firstDayOfMonth = getFirstDayOfMonth(displayMonth, displayYear);
   
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const monthName = new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long' });
+  const monthName = new Date(displayYear, displayMonth).toLocaleString('default', { month: 'long' });
   
-  // Navigation between months
+  // Month navigation
   const goToPreviousMonth = () => {
-    if (currentViewMonth === 0) {
-      setCurrentViewMonth(11);
-      setCurrentViewYear(currentViewYear - 1);
+    if (displayMonth === 0) {
+      setDisplayMonth(11);
+      setDisplayYear(displayYear - 1);
     } else {
-      setCurrentViewMonth(currentViewMonth - 1);
+      setDisplayMonth(displayMonth - 1);
     }
   };
-
+  
   const goToNextMonth = () => {
-    if (currentViewMonth === 11) {
-      setCurrentViewMonth(0);
-      setCurrentViewYear(currentViewYear + 1);
+    if (displayMonth === 11) {
+      setDisplayMonth(0);
+      setDisplayYear(displayYear + 1);
     } else {
-      setCurrentViewMonth(currentViewMonth + 1);
+      setDisplayMonth(displayMonth + 1);
     }
   };
-
+  
   const goToCurrentMonth = () => {
-    setCurrentViewMonth(today.getMonth());
-    setCurrentViewYear(today.getFullYear());
+    setDisplayMonth(currentMonth);
+    setDisplayYear(currentYear);
   };
   
   // Task handlers
@@ -490,7 +493,7 @@ const LLMpediaTracker = () => {
   // Check if a day has a completed task
   const hasCompletedTask = (day) => {
     // Format date string in YYYY-MM-DD format
-    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dateStr = `${displayYear}-${String(displayMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
     // Check if any task has this exact date string
     return tasks.some(task => {
@@ -597,40 +600,6 @@ const LLMpediaTracker = () => {
       return;
     }
 
-    // Handle calendar drags
-    if (result.type === "calendar") {
-      // Extract taskId and date from the draggableId (format: "calendar-{taskId}-{date}")
-      const [_, taskId, sourceDate] = result.draggableId.split("-");
-      
-      // Get destination date from the droppableId (format: "date-{YYYY-MM-DD}")
-      const destinationDate = result.destination.droppableId.split("-").slice(1).join("-");
-      
-      // Check if destination date already has a task
-      const hasTaskOnDestination = tasks.some(task => {
-        const taskDate = task.date ? task.date.split('T')[0] : null;
-        return taskDate === destinationDate && task.completed;
-      });
-      
-      // Only update if dropping on an empty date
-      if (!hasTaskOnDestination) {
-        // Update the task date
-        setTasks(tasks.map(task => 
-          task.id.toString() === taskId 
-            ? { ...task, date: destinationDate }
-            : task
-        ));
-        
-        setStatusMessage("Task moved to new date");
-        setTimeout(() => setStatusMessage(""), 3000);
-      } else {
-        setStatusMessage("Cannot move: destination date already has a task");
-        setTimeout(() => setStatusMessage(""), 3000);
-      }
-      
-      return;
-    }
-
-    // Handle pending tasks list drags (existing functionality)
     const pendingTasks = tasks.filter(task => !task.completed);
     const reorderedPendingTasks = Array.from(pendingTasks);
     
@@ -645,6 +614,83 @@ const LLMpediaTracker = () => {
     ];
     
     setTasks(newTasks);
+  };
+
+  // Handle moving a task from one date to another in the calendar
+  const handleCalendarDateMove = (sourceDate, targetDate) => {
+    // Don't do anything if source and target are the same
+    if (sourceDate === targetDate) return;
+    
+    // Find the task for the source date
+    const sourceTask = tasks.find(task => {
+      const taskDate = task.date ? task.date.split('T')[0] : null;
+      return taskDate === sourceDate && task.completed;
+    });
+    
+    if (!sourceTask) return;
+    
+    // Check if there's already a task on the target date
+    const existingTaskOnTarget = tasks.find(task => {
+      const taskDate = task.date ? task.date.split('T')[0] : null;
+      return taskDate === targetDate && task.completed;
+    });
+    
+    if (existingTaskOnTarget) {
+      // Store the dates for the overlap dialog
+      setDraggedTaskDate(sourceDate);
+      setDropTargetDate(targetDate);
+      setShowCalendarOverlapDialog(true);
+    } else {
+      // No conflict, update the task date directly
+      setTasks(tasks.map(task => 
+        task.id === sourceTask.id 
+          ? { ...task, date: targetDate } 
+          : task
+      ));
+      
+      setStatusMessage(`Task moved to ${targetDate}`);
+      setTimeout(() => setStatusMessage(""), 3000);
+    }
+  };
+  
+  // Replace task on target date with the one from source date
+  const confirmCalendarDateReplace = () => {
+    if (!draggedTaskDate || !dropTargetDate) return;
+    
+    // Find source task
+    const sourceTask = tasks.find(task => {
+      const taskDate = task.date ? task.date.split('T')[0] : null;
+      return taskDate === draggedTaskDate && task.completed;
+    });
+    
+    if (!sourceTask) return;
+    
+    // Find and remove the task on target date
+    const targetTask = tasks.find(task => {
+      const taskDate = task.date ? task.date.split('T')[0] : null;
+      return taskDate === dropTargetDate && task.completed;
+    });
+    
+    if (targetTask) {
+      // Remove the target task
+      const filteredTasks = tasks.filter(task => task.id !== targetTask.id);
+      
+      // Update the source task with the new date
+      const updatedTasks = filteredTasks.map(task => 
+        task.id === sourceTask.id 
+          ? { ...task, date: dropTargetDate } 
+          : task
+      );
+      
+      setTasks(updatedTasks);
+    }
+    
+    setShowCalendarOverlapDialog(false);
+    setDraggedTaskDate(null);
+    setDropTargetDate(null);
+    
+    setStatusMessage(`Task replaced on ${dropTargetDate}`);
+    setTimeout(() => setStatusMessage(""), 3000);
   };
 
   return (
@@ -944,36 +990,32 @@ const LLMpediaTracker = () => {
         {view === "calendar" && (
           <div className="space-y-8">
             <div className="flex justify-between items-end mb-8">
-              <div className="flex items-center space-x-4">
-                <div className="text-2xl font-light">{monthName} {currentYear}</div>
-                <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-4">
+                <div className="text-2xl font-light">{monthName} {displayYear}</div>
+                <div className="flex items-center gap-2">
                   <button 
                     onClick={goToPreviousMonth}
-                    className="p-1 text-gray-500 hover:text-black dark:hover:text-white transition-colors"
+                    className="p-1 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                     aria-label="Previous month"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="15 18 9 12 15 6"></polyline>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M15 18l-6-6 6-6" />
                     </svg>
                   </button>
                   <button
                     onClick={goToCurrentMonth}
-                    className={`text-xs py-1 px-2 ${
-                      currentViewMonth === today.getMonth() && currentViewYear === today.getFullYear()
-                        ? 'text-gray-400 cursor-default'
-                        : 'text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'
-                    }`}
-                    disabled={currentViewMonth === today.getMonth() && currentViewYear === today.getFullYear()}
+                    className="p-1 text-sm border border-gray-200 dark:border-gray-700 rounded px-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    aria-label="Current month"
                   >
                     Today
                   </button>
                   <button 
                     onClick={goToNextMonth}
-                    className="p-1 text-gray-500 hover:text-black dark:hover:text-white transition-colors"
+                    className="p-1 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                     aria-label="Next month"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 18 15 12 9 6"></polyline>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18l6-6-6-6" />
                     </svg>
                   </button>
                 </div>
@@ -988,8 +1030,8 @@ const LLMpediaTracker = () => {
                       const pastDays = Math.min(today.getDate(), daysInMonth);
                       const completedDays = tasks.filter(t => 
                         t.completed && 
-                        new Date(t.date).getMonth() === currentMonth &&
-                        new Date(t.date).getFullYear() === currentYear
+                        new Date(t.date).getMonth() === displayMonth &&
+                        new Date(t.date).getFullYear() === displayYear
                       ).length;
                       const rate = pastDays > 0 ? Math.round((completedDays / pastDays) * 100) : 0;
                       return `${rate}%`;
@@ -1036,144 +1078,107 @@ const LLMpediaTracker = () => {
                   <div className="text-xl font-light">
                     {tasks.filter(t => 
                       t.completed && 
-                      new Date(t.date).getMonth() === currentMonth &&
-                      new Date(t.date).getFullYear() === currentYear
+                      new Date(t.date).getMonth() === displayMonth &&
+                      new Date(t.date).getFullYear() === displayYear
                     ).length} / {daysInMonth}
                   </div>
                 </div>
               </div>
             </div>
             
-            <DragDropContext onDragEnd={onDragEnd}>
-              <div className="grid grid-cols-7 gap-px mb-2 border-t border-l border-gray-100">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
-                  <div key={i} className="text-center text-xs text-gray-500 p-2 border-r border-b border-gray-100">
-                    {day}
+            <div className="grid grid-cols-7 gap-px mb-2 border-t border-l border-gray-100">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
+                <div key={i} className="text-center text-xs text-gray-500 p-2 border-r border-b border-gray-100">
+                  {day}
+                </div>
+              ))}
+              
+              {Array.from({ length: firstDayOfMonth }).map((_, i) => (
+                <div key={`empty-${i}`} className="h-20 border-r border-b border-gray-100"></div>
+              ))}
+              
+              {days.map(day => {
+                const isToday = day === today.getDate() && 
+                                displayMonth === today.getMonth() && 
+                                displayYear === today.getFullYear();
+                const hasCommit = hasCompletedTask(day);
+                
+                // Find task that was completed on this day (if any)
+                const dayStr = `${displayYear}-${String(displayMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayTask = tasks.find(t => {
+                  // Ensure we're comparing the date part only (YYYY-MM-DD)
+                  const taskDate = t.date ? t.date.split('T')[0] : null;
+                  return taskDate === dayStr && t.completed;
+                });
+                
+                // Past date check (today or earlier)
+                const isPastDate = new Date(displayYear, displayMonth, day) <= new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                
+                return (
+                  <div 
+                    key={day} 
+                    className={`h-20 p-2 relative flex flex-col border-r border-b border-gray-100 dark:border-gray-700 ${
+                      isToday ? 'bg-gray-50 dark:bg-gray-700' : ''
+                    } ${isPastDate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : ''}`}
+                    onClick={() => {
+                      if (isPastDate) {
+                        // Check if there's already a task for this date
+                        const existingTask = tasks.find(t => t.date === dayStr);
+                        setSelectedDate(dayStr);
+                        
+                        if (existingTask) {
+                          // Pre-fill the form with existing task data for editing
+                          setBackfillText(existingTask.text);
+                          setBackfillDescription(existingTask.description || "");
+                          setEditingTaskId(existingTask.id);
+                        } else {
+                          // Clear the form for a new task
+                          setBackfillText("");
+                          setBackfillDescription("");
+                          setEditingTaskId(null);
+                        }
+                        
+                        setBackfillDialogVisible(true);
+                      }
+                    }}
+                    draggable={hasCommit}
+                    onDragStart={(e) => {
+                      if (hasCommit) {
+                        e.dataTransfer.setData('text/plain', dayStr);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }
+                    }}
+                    onDragOver={(e) => {
+                      if (isPastDate) {
+                        e.preventDefault(); // Allow drop
+                        e.dataTransfer.dropEffect = 'move';
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const sourceDateStr = e.dataTransfer.getData('text/plain');
+                      if (sourceDateStr && isPastDate) {
+                        handleCalendarDateMove(sourceDateStr, dayStr);
+                      }
+                    }}
+                  >
+                    <span className={`text-sm ${isToday ? 'font-bold' : ''}`}>{day}</span>
+                    
+                    {dayTask && (
+                      <div className="mt-1 overflow-hidden">
+                        <p className="text-xs truncate">{dayTask.text}</p>
+                      </div>
+                    )}
+                    
+                    {hasCommit && (
+                      <div className="mt-auto mb-2 self-center">
+                        <Circle className="fill-black dark:fill-gray-300 text-black dark:text-gray-300" size={8} />
+                      </div>
+                    )}
                   </div>
-                ))}
-                
-                {Array.from({ length: firstDayOfMonth }).map((_, i) => (
-                  <div key={`empty-${i}`} className="h-20 border-r border-b border-gray-100"></div>
-                ))}
-                
-                {days.map(day => {
-                  const isToday = day === today.getDate() && 
-                                  currentMonth === today.getMonth() && 
-                                  currentYear === today.getFullYear();
-                  const hasCommit = hasCompletedTask(day);
-                  
-                  // Find task that was completed on this day (if any)
-                  const dayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                  const dayTask = tasks.find(t => {
-                    // Ensure we're comparing the date part only (YYYY-MM-DD)
-                    const taskDate = t.date ? t.date.split('T')[0] : null;
-                    return taskDate === dayStr && t.completed;
-                  });
-                  
-                  // Past date check (today or earlier)
-                  const isPastDate = new Date(currentYear, currentMonth, day) <= new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                  
-                  if (dayTask && isPastDate) {
-                    // Draggable cell - has a task and is not a future date
-                    return (
-                      <Draggable 
-                        key={day} 
-                        draggableId={`calendar-${dayTask.id}-${dayStr}`} 
-                        index={day}
-                        type="calendar"
-                      >
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`h-20 p-2 relative flex flex-col border-r border-b border-gray-100 dark:border-gray-700 ${
-                              isToday ? 'bg-gray-50 dark:bg-gray-700' : ''
-                            } ${
-                              snapshot.isDragging ? 'bg-gray-100 dark:bg-gray-600 shadow-md z-10' : ''
-                            } cursor-grab active:cursor-grabbing hover:bg-gray-50 dark:hover:bg-gray-800`}
-                          >
-                            <span className={`text-sm ${isToday ? 'font-bold' : ''}`}>{day}</span>
-                            
-                            {dayTask && (
-                              <div className="mt-1 overflow-hidden">
-                                <p className="text-xs truncate">{dayTask.text}</p>
-                              </div>
-                            )}
-                            
-                            {hasCommit && (
-                              <div className="mt-auto mb-2 self-center">
-                                <Circle className="fill-black dark:fill-gray-300 text-black dark:text-gray-300" size={8} />
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </Draggable>
-                    );
-                  } else {
-                    // Droppable cell - create a droppable area for empty days
-                    return (
-                      <Droppable 
-                        key={day} 
-                        droppableId={`date-${dayStr}`}
-                        type="calendar"
-                        isDropDisabled={!isPastDate || hasCommit} // Disable drop for future dates or dates with tasks
-                      >
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.droppableProps}
-                            className={`h-20 p-2 relative flex flex-col border-r border-b border-gray-100 dark:border-gray-700 ${
-                              isToday ? 'bg-gray-50 dark:bg-gray-700' : ''
-                            } ${
-                              isPastDate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : ''
-                            } ${
-                              snapshot.isDraggingOver && !hasCommit ? 'bg-gray-100 dark:bg-gray-600' : ''
-                            }`}
-                            onClick={() => {
-                              if (isPastDate) {
-                                // Check if there's already a task for this date
-                                const existingTask = tasks.find(t => t.date === dayStr);
-                                setSelectedDate(dayStr);
-                                
-                                if (existingTask) {
-                                  // Pre-fill the form with existing task data for editing
-                                  setBackfillText(existingTask.text);
-                                  setBackfillDescription(existingTask.description || "");
-                                  setEditingTaskId(existingTask.id);
-                                } else {
-                                  // Clear the form for a new task
-                                  setBackfillText("");
-                                  setBackfillDescription("");
-                                  setEditingTaskId(null);
-                                }
-                                
-                                setBackfillDialogVisible(true);
-                              }
-                            }}
-                          >
-                            <span className={`text-sm ${isToday ? 'font-bold' : ''}`}>{day}</span>
-                            
-                            {dayTask && (
-                              <div className="mt-1 overflow-hidden">
-                                <p className="text-xs truncate">{dayTask.text}</p>
-                              </div>
-                            )}
-                            
-                            {hasCommit && (
-                              <div className="mt-auto mb-2 self-center">
-                                <Circle className="fill-black dark:fill-gray-300 text-black dark:text-gray-300" size={8} />
-                              </div>
-                            )}
-                            {provided.placeholder}
-                          </div>
-                        )}
-                      </Droppable>
-                    );
-                  }
-                })}
-              </div>
-            </DragDropContext>
+                );
+              })}
+            </div>
             
             <div className="flex items-center gap-6 justify-center text-xs text-gray-500 dark:text-gray-400">
               <div className="flex items-center gap-2">
@@ -1183,10 +1188,6 @@ const LLMpediaTracker = () => {
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600"></div>
                 <span>Today</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 cursor-grab">↔</div>
-                <span>Drag to move</span>
               </div>
             </div>
           </div>
@@ -1590,6 +1591,48 @@ const LLMpediaTracker = () => {
                   {editingTaskId ? 'Update Task' : 'Add Task'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Calendar Overlap Dialog */}
+      {showCalendarOverlapDialog && (
+        <div 
+          className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center p-4 z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowCalendarOverlapDialog(false);
+              setDraggedTaskDate(null);
+              setDropTargetDate(null);
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-xl">
+            <h3 className="text-lg font-medium mb-4">Replace Existing Task?</h3>
+            
+            <p className="mb-4">
+              There is already a task on {dropTargetDate}. Do you want to replace it with the task from {draggedTaskDate}?
+            </p>
+            
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowCalendarOverlapDialog(false);
+                  setDraggedTaskDate(null);
+                  setDropTargetDate(null);
+                }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              
+              <button
+                onClick={confirmCalendarDateReplace}
+                className="px-4 py-2 bg-black dark:bg-gray-700 text-white rounded hover:bg-gray-800 dark:hover:bg-gray-600"
+              >
+                Replace
+              </button>
             </div>
           </div>
         </div>

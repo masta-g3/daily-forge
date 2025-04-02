@@ -52,11 +52,11 @@ The app follows a monolithic component structure where most of the functionality
 
 ### Data Visualization
 - 📊 Calendar view showing daily progress
+- 📊 Month navigation for viewing past and future months
 - 📊 Current streak tracking
 - 📊 Completed tasks history
 - 📊 Drag and drop calendar entries to move tasks between dates
-- 📊 Visual feedback when moving tasks
-- 📊 Month navigation with previous/next/today buttons
+- 📊 Task conflict resolution when moving to occupied dates
 
 ### Data Management
 - 💾 LocalStorage persistence
@@ -78,7 +78,6 @@ The app uses React's built-in useState hooks for state management:
 - `activeTask`: Currently active task (for timer)
 - Timer states: `timerRunning`, `timeRemaining`, `timerDuration`
 - UI states: `view`, `darkMode`, `statusMessage`, etc.
-- Calendar states: `currentViewMonth`, `currentViewYear` for month navigation
 
 ## 🔄 Data Flow
 
@@ -93,7 +92,6 @@ The app uses React's built-in useState hooks for state management:
 - Tailwind CSS for styling
 - Lucide for icons
 - react-beautiful-dnd for drag and drop functionality
-  - Used for both task reordering and calendar entry movement
 
 ## 🔒 Security and Privacy
 
