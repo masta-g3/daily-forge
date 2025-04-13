@@ -506,12 +506,32 @@ const LLMpediaTracker = () => {
   // Calculate streak
   const getStreak = () => {
     const sortedCompletedTasks = tasks
-      .filter(task => task.completed)
-      .map(task => new Date(task.date))
+      .filter(task => task.completed && task.date) // Ensure date exists
+      .map(task => {
+        // Parse YYYY-MM-DD string correctly into a Date object at the start of the day (local time)
+        const [year, month, day] = task.date.split('-').map(Number);
+        return new Date(year, month - 1, day); 
+      })
       .sort((a, b) => b - a); // Sort descending
     
     if (sortedCompletedTasks.length === 0) return 0;
     
+    const mostRecentCompletionDate = sortedCompletedTasks[0];
+
+    // Get today's date at the start of the day
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get yesterday's date at the start of the day
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    // Check if the most recent completion was today or yesterday
+    if (mostRecentCompletionDate.getTime() !== today.getTime() && mostRecentCompletionDate.getTime() !== yesterday.getTime()) {
+      return 0; // Streak is broken if not completed today or yesterday
+    }
+    
+    // If streak is current (completed today or yesterday), calculate its length
     let streak = 1;
     const oneDayMs = 24 * 60 * 60 * 1000;
     
@@ -519,12 +539,13 @@ const LLMpediaTracker = () => {
       const current = sortedCompletedTasks[i];
       const next = sortedCompletedTasks[i + 1];
       
-      const diffDays = Math.round((current - next) / oneDayMs);
+      // Ensure comparison uses time at start of day
+      const diffDays = Math.round((current.getTime() - next.getTime()) / oneDayMs);
       
       if (diffDays === 1) {
         streak++;
       } else {
-        break;
+        break; // Found a gap, streak ends
       }
     }
     
@@ -1027,13 +1048,23 @@ const LLMpediaTracker = () => {
                   <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Completion rate</div>
                   <div className="text-xl font-light">
                     {(() => {
-                      const pastDays = Math.min(today.getDate(), daysInMonth);
+                      const today = new Date();
+                      const daysInMonth = getDaysInMonth(displayMonth, displayYear);
+                      
+                      // Determine if the currently displayed month/year is the current actual month/year
+                      const isCurrentMonthView = displayMonth === today.getMonth() && displayYear === today.getFullYear();
+                      
+                      // Use today's date for the current month, otherwise use the total days in the viewed month
+                      const denominatorDays = isCurrentMonthView ? today.getDate() : daysInMonth;
+
                       const completedDays = tasks.filter(t => 
                         t.completed && 
                         new Date(t.date).getMonth() === displayMonth &&
                         new Date(t.date).getFullYear() === displayYear
                       ).length;
-                      const rate = pastDays > 0 ? Math.round((completedDays / pastDays) * 100) : 0;
+                      
+                      // Avoid division by zero if denominatorDays is 0 (e.g., viewing future month or current month on day 0 - though unlikely)
+                      const rate = denominatorDays > 0 ? Math.round((completedDays / denominatorDays) * 100) : 0;
                       return `${rate}%`;
                     })()}
                   </div>
