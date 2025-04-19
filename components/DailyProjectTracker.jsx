@@ -1,16 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Check, X, Play, Pause, Trash2, Circle, Download, Upload, Settings, Save, Moon, Sun, Coffee } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, Check, X, Play, Pause, Trash2, Circle, Download, Upload, Settings, Save, Moon, Sun, Coffee, ChevronDown } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 const LLMpediaTracker = () => {
   // State management
-  const [tasks, setTasks] = useState([]);  // Start with empty array instead of example data
   const [newTask, setNewTask] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [activeTask, setActiveTask] = useState(null);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(45 * 60); // 45 minutes in seconds
-  const [timerDuration, setTimerDuration] = useState(45); // in minutes
   const [isBreakMode, setIsBreakMode] = useState(false); // New state for break mode
   const [view, setView] = useState("dashboard"); // "dashboard", "calendar", "timer", "settings"
   const [statusMessage, setStatusMessage] = useState("");
@@ -18,8 +16,6 @@ const LLMpediaTracker = () => {
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [exportDataString, setExportDataString] = useState("");
   const [generatedUrl, setGeneratedUrl] = useState("");
-  const [darkMode, setDarkMode] = useState(false);
-  const [title, setTitle] = useState("Project");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);  // Add initialization flag
   const [selectedDate, setSelectedDate] = useState("");
@@ -32,6 +28,120 @@ const LLMpediaTracker = () => {
   const [dropTargetDate, setDropTargetDate] = useState(null);
   const [displayMonth, setDisplayMonth] = useState(new Date().getMonth());
   const [displayYear, setDisplayYear] = useState(new Date().getFullYear());
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false); // State for dropdown visibility
+  const projectDropdownRef = useRef(null); // Ref for dropdown element
+
+  // NEW: Multi-project state
+  const [allProjectsData, setAllProjectsData] = useState({
+    projects: {}, // { [projectId]: { id, title, tasks: [], settings: { timerDuration } } }
+    globalSettings: { darkMode: false },
+    activeProjectId: null, // ID of the currently active project
+  });
+
+  // DERIVED STATE: Get data for the active project
+  const activeProject = useMemo(() => {
+    return allProjectsData.projects[allProjectsData.activeProjectId] || null;
+  }, [allProjectsData.projects, allProjectsData.activeProjectId]);
+
+  const tasks = useMemo(() => {
+    return activeProject ? activeProject.tasks : [];
+  }, [activeProject]);
+
+  const title = useMemo(() => {
+    return activeProject ? activeProject.title : "Project";
+  }, [activeProject]);
+
+  // Need setters that update allProjectsData
+  const setTitle = (newTitle) => {
+    if (!allProjectsData.activeProjectId || !allProjectsData.projects[allProjectsData.activeProjectId]) return;
+    setAllProjectsData(prevData => ({
+      ...prevData,
+      projects: {
+        ...prevData.projects,
+        [allProjectsData.activeProjectId]: {
+          ...prevData.projects[allProjectsData.activeProjectId],
+          title: newTitle
+        }
+      }
+    }));
+  };
+
+  const timerDuration = useMemo(() => {
+    return activeProject?.settings?.timerDuration || 45;
+  }, [activeProject]);
+
+  const setTimerDuration = (newDuration) => {
+    if (!allProjectsData.activeProjectId || !allProjectsData.projects[allProjectsData.activeProjectId]) return;
+    setAllProjectsData(prevData => ({
+      ...prevData,
+      projects: {
+        ...prevData.projects,
+        [allProjectsData.activeProjectId]: {
+          ...prevData.projects[allProjectsData.activeProjectId],
+          settings: {
+            ...prevData.projects[allProjectsData.activeProjectId]?.settings,
+            timerDuration: newDuration
+          }
+        }
+      }
+    }));
+    // Also reset timer state when duration changes
+    setTimeRemaining(newDuration * 60);
+    setTimerRunning(false);
+  };
+
+  const darkMode = useMemo(() => {
+    return allProjectsData.globalSettings?.darkMode || false;
+  }, [allProjectsData.globalSettings]);
+
+  const setDarkMode = (isDark) => {
+    setAllProjectsData(prevData => ({
+      ...prevData,
+      globalSettings: {
+        ...prevData.globalSettings,
+        darkMode: isDark
+      }
+    }));
+  };
+
+  // Close project dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(event.target)) {
+        setShowProjectDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Function to add a new project
+  const addNewProject = () => {
+    const newProjectName = prompt("Enter name for the new project:");
+    if (newProjectName && newProjectName.trim() !== "") {
+      const newProjectId = `proj_${Date.now()}`;
+      const newProject = {
+        id: newProjectId,
+        title: newProjectName.trim(),
+        tasks: [], // Start with empty tasks
+        settings: { timerDuration: 45 } // Default settings
+      };
+
+      setAllProjectsData(prevData => ({
+        ...prevData,
+        projects: {
+          ...prevData.projects,
+          [newProjectId]: newProject
+        },
+        activeProjectId: newProjectId // Switch to the new project
+      }));
+
+      setShowProjectDropdown(false); // Close dropdown
+    }
+  };
 
   // Data persistence functions
   const saveToLocalStorage = () => {
@@ -43,16 +153,11 @@ const LLMpediaTracker = () => {
       }
 
       // Explicitly stringify with null replacer and no whitespace
-      const tasksJson = JSON.stringify(tasks, null, 0);
-      const settingsJson = JSON.stringify({ timerDuration, darkMode, title }, null, 0);
+      const dataJson = JSON.stringify(allProjectsData, null, 0);
       
-      console.log('Saving to localStorage:', {
-        tasks: tasks,
-        settings: { timerDuration, darkMode, title }
-      });
+      console.log('Saving to localStorage:', allProjectsData);
       
-      localStorage.setItem('llmpedia-tasks', tasksJson);
-      localStorage.setItem('llmpedia-settings', settingsJson);
+      localStorage.setItem('daily-forge-data', dataJson);
       
       return true;
     } catch (error) {
@@ -66,32 +171,21 @@ const LLMpediaTracker = () => {
   const loadFromLocalStorage = () => {
     try {
       console.log("Loading from localStorage");
-      const savedTasks = localStorage.getItem('llmpedia-tasks');
-      const savedSettings = localStorage.getItem('llmpedia-settings');
+      const savedData = localStorage.getItem('daily-forge-data');
       
       console.log('Retrieved from localStorage:', {
-        tasks: savedTasks ? JSON.parse(savedTasks) : null,
-        settings: savedSettings ? JSON.parse(savedSettings) : null
+        daily_forge_data: savedData ? JSON.parse(savedData) : null
       });
       
-      if (savedTasks) {
-        setTasks(JSON.parse(savedTasks));
+      if (savedData) {
+        const parsedData = JSON.parse(savedData);
+        setAllProjectsData(parsedData);
+        console.log("Loaded data using new format.");
+        return true;
+      } else {
+        console.log("No data found in localStorage.");
+        return false;
       }
-      
-      if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
-        if (settings.timerDuration) {
-          setTimerDuration(settings.timerDuration);
-        }
-        if (settings.darkMode !== undefined) {
-          setDarkMode(settings.darkMode);
-        }
-        if (settings.title) {
-          setTitle(settings.title);
-        }
-      }
-      
-      return true;
     } catch (error) {
       console.error('Failed to load from localStorage:', error);
       return false;
@@ -100,12 +194,10 @@ const LLMpediaTracker = () => {
 
   const prepareDataExport = () => {
     try {
-      const data = {
-        tasks,
-        settings: { timerDuration, darkMode, title }
-      };
-      
-      const jsonStr = JSON.stringify(data, null, 2);
+      // Export the entire multi-project structure
+      const data = allProjectsData;
+
+      const jsonStr = JSON.stringify(data, null, 2); // Pretty print for readability
       setExportDataString(jsonStr);
       setExportModalVisible(true);
       
@@ -129,29 +221,28 @@ const LLMpediaTracker = () => {
         try {
           const data = JSON.parse(e.target.result);
           console.log('Importing data:', data);
-          
-          if (data.tasks && Array.isArray(data.tasks)) {
-            setTasks(data.tasks);
+
+          // Validate the imported data structure (basic check)
+          if (data && data.projects && data.globalSettings && data.activeProjectId) {
+            setAllProjectsData(data); // Replace existing data
+
+            // Save imported data to localStorage immediately
+            // Use setTimeout to ensure state update is processed
+            setTimeout(() => {
+              const saved = saveToLocalStorage();
+              if (saved) {
+                 setStatusMessage("Data imported successfully and saved");
+              } else {
+                setStatusMessage("Data imported but failed to save");
+              }
+              setTimeout(() => setStatusMessage(""), 3000);
+            }, 0);
+
+          } else {
+            console.error('Invalid data structure in import file.');
+            setStatusMessage("Invalid import file structure");
+            setTimeout(() => setStatusMessage(""), 3000);
           }
-          
-          if (data.settings && typeof data.settings === 'object') {
-            const { timerDuration, darkMode, title } = data.settings;
-            if (timerDuration) {
-              setTimerDuration(timerDuration);
-            }
-            if (darkMode !== undefined) {
-              setDarkMode(darkMode);
-            }
-            if (title) {
-              setTitle(title);
-            }
-          }
-          
-          // Save imported data to localStorage
-          setTimeout(() => saveToLocalStorage(), 0);
-          
-          setStatusMessage("Data imported successfully");
-          setTimeout(() => setStatusMessage(""), 3000);
         } catch (error) {
           console.error('Failed to parse import file:', error);
           setStatusMessage("Failed to parse import file");
@@ -213,7 +304,7 @@ const LLMpediaTracker = () => {
     }, 500);
     
     return () => clearTimeout(saveTimeout);
-  }, [tasks, timerDuration, darkMode, title, isInitialized]);
+  }, [allProjectsData, isInitialized]);
 
   // Load data from URL hash if present
   useEffect(() => {
@@ -225,36 +316,31 @@ const LLMpediaTracker = () => {
         if (dataParam) {
           try {
             // Decode base64
-            const jsonStr = atob(dataParam);
+            const jsonStr = atob(decodeURIComponent(dataParam)); // Ensure decoding before atob
             const data = JSON.parse(jsonStr);
-            
-            if (data.tasks && Array.isArray(data.tasks)) {
-              setTasks(data.tasks);
-              console.log("Tasks loaded from URL hash:", data.tasks.length);
+
+            // Load the full structure from URL
+            if (data && data.projects && data.globalSettings && data.activeProjectId) {
+              console.log("Loading full data structure from URL hash:", data);
+              setAllProjectsData(data); // Replace current state
+
+              // Mark as initialized after loading URL data
+              setIsInitialized(true);
+              console.log("Initialization complete from URL data");
+
+              setStatusMessage("Data loaded from URL");
+              setTimeout(() => setStatusMessage(""), 3000);
+
+              // Clear hash after loading
+              window.location.hash = '';
+            } else {
+              console.error('Invalid data structure in URL hash.');
+              setStatusMessage("Error loading data from URL: Invalid structure");
+              setTimeout(() => setStatusMessage(""), 3000);
+              // Still mark as initialized even on error to allow app to load default/local data
+              setIsInitialized(true);
+              window.location.hash = ''; // Clear invalid hash
             }
-            
-            if (data.settings && typeof data.settings === 'object') {
-              const { timerDuration, darkMode, title } = data.settings;
-              if (timerDuration) {
-                setTimerDuration(timerDuration);
-              }
-              if (darkMode !== undefined) {
-                setDarkMode(darkMode);
-              }
-              if (title) {
-                setTitle(title);
-              }
-            }
-            
-            // Mark as initialized after loading URL data
-            setIsInitialized(true);
-            console.log("Initialization complete from URL data");
-            
-            setStatusMessage("Data loaded from URL");
-            setTimeout(() => setStatusMessage(""), 3000);
-            
-            // Clear hash after loading
-            window.location.hash = '';
           } catch (error) {
             console.error('Failed to parse data from URL:', error);
             setStatusMessage("Error loading data from URL");
@@ -286,23 +372,38 @@ const LLMpediaTracker = () => {
         
         // If component is still mounted
         if (mounted) {
-          // If nothing in local storage, load example data
-          if (!dataFromStorage && tasks.length === 0) {
-            console.log("No data in localStorage, loading example data");
-            const exampleData = [
-              { id: 1, text: "Create database schema for LLM comparison", description: "Define entities and relationships for comparing different LLM architectures", completed: true, date: "2025-03-01" },
-              { id: 2, text: "Design interactive visualization for model parameters", description: "Create a flexible chart system that shows model size, training data, and performance metrics", completed: true, date: "2025-03-02" },
-              { id: 3, text: "Implement citation system for research papers", description: "Allow users to link claims to academic papers with proper citation format", completed: false, date: null },
-              { id: 4, text: "Build user profile system for contributors", description: "Create profiles that track expertise and contribution areas", completed: false, date: null },
-              { id: 5, text: "Create taxonomy for LLM capabilities", description: "Develop a standardized way to classify and compare model capabilities", completed: false, date: null },
-            ];
-            setTasks(exampleData);
-            
+          // If nothing in local storage, load example data into the new structure
+          if (!dataFromStorage) {
+            console.log("No data in localStorage, creating default project structure");
+            const defaultProjectId = `proj_${Date.now()}`;
+            const exampleTasks = [
+                  { id: 1, text: "Create database schema for LLM comparison", description: "Define entities and relationships for comparing different LLM architectures", completed: true, date: "2025-03-01" },
+                  { id: 2, text: "Design interactive visualization for model parameters", description: "Create a flexible chart system that shows model size, training data, and performance metrics", completed: true, date: "2025-03-02" },
+                  { id: 3, text: "Implement citation system for research papers", description: "Allow users to link claims to academic papers with proper citation format", completed: false, date: null },
+                  { id: 4, text: "Build user profile system for contributors", description: "Create profiles that track expertise and contribution areas", completed: false, date: null },
+                  { id: 5, text: "Create taxonomy for LLM capabilities", description: "Develop a standardized way to classify and compare model capabilities", completed: false, date: null },
+                ];
+
+            const initialData = {
+              projects: {
+                [defaultProjectId]: {
+                  id: defaultProjectId,
+                  title: "My First Project",
+                  tasks: exampleTasks,
+                  settings: { timerDuration: 45 }
+                }
+              },
+              globalSettings: { darkMode: false },
+              activeProjectId: defaultProjectId
+            };
+
+            setAllProjectsData(initialData);
+
             // Wait for state to update before saving
             await new Promise(resolve => setTimeout(resolve, 0));
-            
+
             if (mounted) {
-              console.log("Saving example data");
+              console.log("Saving default data structure");
               saveToLocalStorage();
             }
           }
@@ -427,23 +528,41 @@ const LLMpediaTracker = () => {
   // Task handlers
   const addTask = () => {
     if (newTask.trim() !== "") {
-      setTasks([
-        ...tasks,
-        {
-          id: Date.now(),
-          text: newTask,
-          description: newDescription.trim(),
-          completed: false,
-          date: null
+      setAllProjectsData(prevData => ({
+        ...prevData,
+        projects: {
+          ...prevData.projects,
+          [allProjectsData.activeProjectId]: {
+            ...prevData.projects[allProjectsData.activeProjectId],
+            tasks: [
+              ...prevData.projects[allProjectsData.activeProjectId].tasks,
+              {
+                id: Date.now(),
+                text: newTask,
+                description: newDescription.trim(),
+                completed: false,
+                date: null
+              }
+            ]
+          }
         }
-      ]);
+      }));
       setNewTask("");
       setNewDescription("");
     }
   };
   
   const deleteTask = (id) => {
-    setTasks(tasks.filter(task => task.id !== id));
+    setAllProjectsData(prevData => ({
+      ...prevData,
+      projects: {
+        ...prevData.projects,
+        [allProjectsData.activeProjectId]: {
+          ...prevData.projects[allProjectsData.activeProjectId],
+          tasks: prevData.projects[allProjectsData.activeProjectId].tasks.filter(task => task.id !== id)
+        }
+      }
+    }));
   };
   
   // Check if we already completed a task today
@@ -473,11 +592,20 @@ const LLMpediaTracker = () => {
       const today = new Date();
       const localDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       
-      setTasks(tasks.map(task => 
-        task.id === activeTask.id 
-          ? { ...task, completed: true, date: localDateStr } 
-          : task
-      ));
+      setAllProjectsData(prevData => ({
+        ...prevData,
+        projects: {
+          ...prevData.projects,
+          [allProjectsData.activeProjectId]: {
+            ...prevData.projects[allProjectsData.activeProjectId],
+            tasks: prevData.projects[allProjectsData.activeProjectId].tasks.map(task => 
+              task.id === activeTask.id 
+                ? { ...task, completed: true, date: localDateStr } 
+                : task
+            )
+          }
+        }
+      }));
       setActiveTask(null);
       setTimerRunning(false);
       setView("dashboard");
@@ -556,7 +684,7 @@ const LLMpediaTracker = () => {
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
   };
-  
+
   // Apply dark mode class to html element
   useEffect(() => {
     if (darkMode) {
@@ -564,9 +692,6 @@ const LLMpediaTracker = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    
-    // Save preference to localStorage
-    saveToLocalStorage();
   }, [darkMode]);
   
   // Add or update a task for a specific date
@@ -574,17 +699,26 @@ const LLMpediaTracker = () => {
     if (backfillText.trim() !== "") {
       if (editingTaskId) {
         // Update existing task
-        setTasks(tasks.map(task => 
-          task.id === editingTaskId 
-            ? { 
-                ...task, 
-                text: backfillText,
-                description: backfillDescription.trim(),
-                date: selectedDate,
-                completed: true
-              } 
-            : task
-        ));
+        setAllProjectsData(prevData => ({
+          ...prevData,
+          projects: {
+            ...prevData.projects,
+            [allProjectsData.activeProjectId]: {
+              ...prevData.projects[allProjectsData.activeProjectId],
+              tasks: prevData.projects[allProjectsData.activeProjectId].tasks.map(task => 
+                task.id === editingTaskId 
+                  ? { 
+                      ...task, 
+                      text: backfillText,
+                      description: backfillDescription.trim(),
+                      date: selectedDate,
+                      completed: true
+                    } 
+                  : task
+              )
+            }
+          }
+        }));
       } else {
         // Add new task
         const newTask = {
@@ -595,7 +729,16 @@ const LLMpediaTracker = () => {
           date: selectedDate
         };
         
-        setTasks([...tasks, newTask]);
+        setAllProjectsData(prevData => ({
+          ...prevData,
+          projects: {
+            ...prevData.projects,
+            [allProjectsData.activeProjectId]: {
+              ...prevData.projects[allProjectsData.activeProjectId],
+              tasks: [...prevData.projects[allProjectsData.activeProjectId].tasks, newTask]
+            }
+          }
+        }));
       }
       
       // Reset form
@@ -634,7 +777,16 @@ const LLMpediaTracker = () => {
       ...tasks.filter(task => task.completed)
     ];
     
-    setTasks(newTasks);
+    setAllProjectsData(prevData => ({
+      ...prevData,
+      projects: {
+        ...prevData.projects,
+        [allProjectsData.activeProjectId]: {
+          ...prevData.projects[allProjectsData.activeProjectId],
+          tasks: newTasks
+        }
+      }
+    }));
   };
 
   // Handle moving a task from one date to another in the calendar
@@ -663,11 +815,20 @@ const LLMpediaTracker = () => {
       setShowCalendarOverlapDialog(true);
     } else {
       // No conflict, update the task date directly
-      setTasks(tasks.map(task => 
-        task.id === sourceTask.id 
-          ? { ...task, date: targetDate } 
-          : task
-      ));
+      setAllProjectsData(prevData => ({
+        ...prevData,
+        projects: {
+          ...prevData.projects,
+          [allProjectsData.activeProjectId]: {
+            ...prevData.projects[allProjectsData.activeProjectId],
+            tasks: prevData.projects[allProjectsData.activeProjectId].tasks.map(task => 
+              task.id === sourceTask.id 
+                ? { ...task, date: targetDate } 
+                : task
+            )
+          }
+        }
+      }));
       
       setStatusMessage(`Task moved to ${targetDate}`);
       setTimeout(() => setStatusMessage(""), 3000);
@@ -703,7 +864,16 @@ const LLMpediaTracker = () => {
           : task
       );
       
-      setTasks(updatedTasks);
+      setAllProjectsData(prevData => ({
+        ...prevData,
+        projects: {
+          ...prevData.projects,
+          [allProjectsData.activeProjectId]: {
+            ...prevData.projects[allProjectsData.activeProjectId],
+            tasks: updatedTasks
+          }
+        }
+      }));
     }
     
     setShowCalendarOverlapDialog(false);
@@ -727,12 +897,10 @@ const LLMpediaTracker = () => {
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={() => {
                   setIsEditingTitle(false);
-                  saveToLocalStorage();
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     setIsEditingTitle(false);
-                    saveToLocalStorage();
                   }
                   if (e.key === 'Escape') {
                     setIsEditingTitle(false);
@@ -742,13 +910,57 @@ const LLMpediaTracker = () => {
                 autoFocus
               />
             ) : (
-              <h1 
-                className="text-xl font-normal tracking-tight cursor-pointer hover:opacity-80"
-                onClick={() => setIsEditingTitle(true)}
-                title="Click to edit project name"
-              >
-                {title}
-              </h1>
+              <div className="flex items-center gap-2 relative" ref={projectDropdownRef}>
+                <h1
+                  className="text-xl font-normal tracking-tight cursor-pointer hover:opacity-80"
+                  onClick={() => setIsEditingTitle(true)}
+                  title="Click to edit project name"
+                >
+                  {title}
+                </h1>
+                <button
+                  onClick={() => setShowProjectDropdown(!showProjectDropdown)}
+                  className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+                  title="Switch Project"
+                  aria-haspopup="true"
+                  aria-expanded={showProjectDropdown}
+                >
+                  <ChevronDown size={16} />
+                </button>
+
+                {showProjectDropdown && (
+                  <div className="absolute top-full left-0 mt-2 w-60 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg z-20">
+                    <ul className="py-1">
+                      {Object.values(allProjectsData.projects).map(project => (
+                        <li key={project.id}>
+                          <button
+                            onClick={() => {
+                              setAllProjectsData(prevData => ({
+                                ...prevData,
+                                activeProjectId: project.id
+                              }));
+                              setShowProjectDropdown(false);
+                            }}
+                            className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${project.id === allProjectsData.activeProjectId ? 'font-bold bg-gray-100 dark:bg-gray-700' : ''}`}
+                          >
+                            {project.title}
+                          </button>
+                        </li>
+                      ))}
+                      {/* Add New Project button */}
+                      <li>
+                        <hr className="my-1 border-gray-200 dark:border-gray-700" />
+                        <button
+                          onClick={addNewProject} // Call the new function
+                          className="w-full text-left px-4 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
+                          + Add New Project
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <div className="flex gap-6 items-center">
@@ -1303,8 +1515,6 @@ const LLMpediaTracker = () => {
                   onChange={(e) => {
                     const newDuration = parseInt(e.target.value);
                     setTimerDuration(newDuration);
-                    setTimeRemaining(newDuration * 60);
-                    setTimerRunning(false);
                   }}
                   className="w-full appearance-none h-1 bg-gray-200 rounded outline-none"
                 />
@@ -1424,24 +1634,14 @@ const LLMpediaTracker = () => {
                     <button 
                       onClick={() => {
                         try {
-                          // For URL sharing, we'll only include necessary data to reduce size
-                          const compactTasks = tasks.map(task => ({
-                            id: task.id,
-                            text: task.text,
-                            description: task.description,
-                            completed: task.completed,
-                            date: task.date
-                          }));
-                          
-                          const dataToEncode = {
-                            tasks: compactTasks,
-                            settings: { timerDuration, darkMode, title }
-                          };
-                          
+                          // For URL sharing, encode the entire allProjectsData structure
+                          const dataToEncode = allProjectsData;
+
                           const jsonString = JSON.stringify(dataToEncode);
                           const base64Data = btoa(jsonString);
-                          const url = `${window.location.origin}${window.location.pathname}?data=${encodeURIComponent(base64Data)}`;
-                          
+                          // Use hash (#) and ensure proper encoding for URL
+                          const url = `${window.location.origin}${window.location.pathname}#data=${encodeURIComponent(base64Data)}`;
+
                           setGeneratedUrl(url);
                           
                           // Copy to clipboard
@@ -1585,7 +1785,16 @@ const LLMpediaTracker = () => {
                 <button
                   onClick={() => {
                     // Delete the task
-                    setTasks(tasks.filter(task => task.id !== editingTaskId));
+                    setAllProjectsData(prevData => ({
+                      ...prevData,
+                      projects: {
+                        ...prevData.projects,
+                        [allProjectsData.activeProjectId]: {
+                          ...prevData.projects[allProjectsData.activeProjectId],
+                          tasks: prevData.projects[allProjectsData.activeProjectId].tasks.filter(task => task.id !== editingTaskId)
+                        }
+                      }
+                    }));
                     setBackfillDialogVisible(false);
                     setBackfillText("");
                     setBackfillDescription("");
