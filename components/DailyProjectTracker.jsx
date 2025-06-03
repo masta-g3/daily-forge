@@ -768,10 +768,6 @@ const LLMpediaTracker = () => {
   const onDragEnd = (result) => {
     // Drop outside the list
     if (!result.destination) {
-      // Clear focus from any dragged element
-      if (document.activeElement) {
-        document.activeElement.blur();
-      }
       return;
     }
 
@@ -798,13 +794,6 @@ const LLMpediaTracker = () => {
         }
       }
     }));
-
-    // Clear focus from any dragged element to remove stuck focus outline
-    setTimeout(() => {
-      if (document.activeElement) {
-        document.activeElement.blur();
-      }
-    }, 0);
   };
 
   // Handle moving a task from one date to another in the calendar
@@ -1122,7 +1111,7 @@ const LLMpediaTracker = () => {
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
-                                className={`p-4 flex flex-col border border-gray-100 hover:border-gray-300 transition-all duration-200 cursor-grab active:cursor-grabbing group ${
+                                className={`p-4 flex flex-col border border-gray-100 hover:border-gray-300 transition-all duration-200 group ${
                                   snapshot.isDragging 
                                     ? 'bg-gray-50 dark:bg-gray-800 shadow-md scale-[1.02] border-gray-300 dark:border-gray-600 z-10' 
                                     : ''
