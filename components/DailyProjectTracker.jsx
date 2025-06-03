@@ -572,6 +572,13 @@ const LLMpediaTracker = () => {
     return tasks.some(task => task.completed && task.date === todayStr);
   };
 
+  // Check if a specific project has completed a task today
+  const projectHasCompletedTaskToday = (project) => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return project.tasks.some(task => task.completed && task.date === todayStr);
+  };
+
   const startTask = (task) => {
     // Don't allow starting new tasks if we already completed one today
     if (hasCompletedTaskToday()) {
@@ -943,7 +950,12 @@ const LLMpediaTracker = () => {
                             }}
                             className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${project.id === allProjectsData.activeProjectId ? 'font-bold bg-gray-100 dark:bg-gray-700' : ''}`}
                           >
-                            {project.title}
+                            <div className="flex items-center justify-between">
+                              <span>{project.title}</span>
+                              {projectHasCompletedTaskToday(project) && (
+                                <Circle className="fill-black dark:fill-gray-300 text-black dark:text-gray-300 ml-2" size={6} />
+                              )}
+                            </div>
                           </button>
                         </li>
                       ))}

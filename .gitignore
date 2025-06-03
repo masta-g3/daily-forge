@@ -17,6 +17,7 @@ package-lock.json
 # misc
 .DS_Store
 *.pem
+*.json
 
 # debug
 npm-debug.log*
@@ -33,3 +34,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts 
+
+## other
+PLANNING.md
+CHANGES.md
