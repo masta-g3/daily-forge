@@ -768,6 +768,10 @@ const LLMpediaTracker = () => {
   const onDragEnd = (result) => {
     // Drop outside the list
     if (!result.destination) {
+      // Clear focus from any dragged element
+      if (document.activeElement) {
+        document.activeElement.blur();
+      }
       return;
     }
 
@@ -794,6 +798,13 @@ const LLMpediaTracker = () => {
         }
       }
     }));
+
+    // Clear focus from any dragged element to remove stuck focus outline
+    setTimeout(() => {
+      if (document.activeElement) {
+        document.activeElement.blur();
+      }
+    }, 0);
   };
 
   // Handle moving a task from one date to another in the calendar
